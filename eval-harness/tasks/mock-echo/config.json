@@ -1,0 +1,5 @@
+{
+  "prompt": "Reply with exactly: HARNESS_TEST_OK",
+  "skills": [],
+  "timeout": 60
+}

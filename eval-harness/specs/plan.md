@@ -1,0 +1,225 @@
+# Implementation Plan: Evaluation Harness Framework
+
+**Branch**: `eval-harness-spec` | **Date**: 2026-07-17 | **Spec**: [harness-spec.md](harness-spec.md), [task-spec.md](task-spec.md)
+
+**Input**: Feature specifications from `eval-harness/specs/`
+
+## Summary
+
+Build a modular, task-agnostic evaluation harness framework that dynamically discovers evaluation tasks from a `tasks/` directory, supports per-model reasoning effort configurations, uses provider-specific cost-tracking strategies via a factory pattern, and outputs a standardized 26-field metrics schema. The framework executes all agent work through the **Hermes Agent CLI** (`hermes config set agent.reasoning_effort <effort>` followed by `hermes -p <profile> chat -q ... -m <model> --provider <provider> -s <skills> -Q`).
+
+## Technical Context
+
+**Language/Version**: Python 3.11+
+
+**Primary Dependencies**: `sqlite3` (stdlib), `subprocess` (stdlib), `csv`/`json` (stdlib), `gspread` + `google-auth` (optional, for Google Sheets persistence)
+
+**Storage**: SQLite (`~/.hermes/profiles/eval/state.db`) for session metrics; CSV for results; Google Sheets (optional)
+
+**Testing**: Manual verification via `--dry-run` and single-model/single-task runs
+
+**Target Platform**: Linux (Raspberry Pi), aarch64
+
+**Project Type**: CLI application (Python script)
+
+**Constraints**: Must run under `~/.hermes/.venv-google/bin/python` for Google API access; Hermes CLI must be on `$PATH`
+
+---
+
+## Constitution Check
+
+| Constraint | Status |
+|---|---|
+| Task-agnostic harness (no task-specific logic in core) | ✅ Will be enforced by task directory contracts |
+| Provider-agnostic cost tracking (factory pattern) | ✅ Enforced via abstract base class + factory |
+| Hermes CLI as exclusive executor | ✅ All agent runs use `hermes chat -q` |
+| Modular task directory layout | ✅ New `tasks/<name>/` structure |
+
+---
+
+## Project Structure
+
+### Source Code
+
+```text
+eval-harness/
+├── specs/
+│   ├── harness-spec.md         # Framework specification
+│   ├── task-spec.md            # Task interface specification
+│   ├── plan.md                 # This file
+│   └── tasks.md                # Task breakdown
+├── src/
+│   ├── harness.py              # Main evaluation orchestrator
+│   ├── config.py               # Configuration loading + model config parsing
+│   ├── executor.py             # Hermes CLI execution wrapper
+│   ├── metrics.py              # Session metrics extraction from state.db
+│   ├── cost_tracker.py         # Base class + factory for cost strategies
+│   ├── session_logger.py       # Transcript export from state.db messages
+│   ├── task_registry.py        # Dynamic task discovery from tasks/ directory
+│   ├── sheets.py               # Google Sheets persistence (pre-authorized token auth)
+│   └── results.py              # CSV writer for local results persistence
+├── tasks/
+│   └── mock-echo/              # Mock task for harness testing
+│       ├── config.json
+│       ├── reset.py
+│       ├── validator.py
+│       └── fixtures/
+│           └── expected.json
+├── results/
+│   ├── eval_results.csv
+│   └── sessions/
+├── config.json                 # Global harness config (models, runs, profile)
+├── run.sh                      # Wrapper script
+└── README.md
+```
+
+**Structure Decision**: Flat `src/` module layout with focused, single-responsibility modules. Task-specific code lives in `tasks/<name>/` directories, completely decoupled from the harness core. No packages or `__init__.py` required — all modules are imported directly via `sys.path`.
+
+---
+
+## Architecture & Data Flow
+
+### Execution Loop Order
+
+The harness iterates in **task → run_number → model_config** order:
+
+```
+for task in selected_tasks:
+    for run_num in range(1, num_runs + 1):
+        for model_config in model_configs:
+            1. Invoke task reset hook
+            2. Snapshot cost (before)
+            3. Execute: hermes -p eval config set agent.reasoning_effort <effort>
+            4. Execute: hermes -p eval chat -q "<prompt>" -m <model> --provider <provider> -s <skills> -Q
+            4. Wait for cost reconciliation (if provider strategy requires it)
+            5. Snapshot cost (after) or calculate offline
+            6. Extract session metrics from state.db
+            7. Run task validator
+            8. Export session transcript
+            9. Save metrics row to CSV (and optionally Google Sheets)
+```
+
+### Configuration Schema
+
+Each model entry in `config.json` is a configuration object:
+
+```json
+{
+  "model": "deepseek-v4-flash",
+  "provider": "deepseek",
+  "reasoning_effort": "high"
+}
+```
+
+The global config also optionally includes Google Sheets configuration for saving evaluation results to the cloud:
+
+```json
+"google_sheets": {
+  "spreadsheet_id": "YOUR_SPREADSHEET_ID",
+  "sheet_name": "Results",
+  "token_path": "/home/mcampo/.hermes/authorized_user.json"
+}
+```
+
+The `token_path` points to a pre-authorized OAuth2 token file (`authorized_user.json`). This file is generated by running the `generate_google_token` helper from `sheets.py` on a local machine with a browser (see below), and must be copied to the RPi before running the harness with Google Sheets enabled.
+
+The `config_name` is derived as: `<model_short_name> (<reasoning_effort>)` — e.g. `deepseek-v4-flash (high)`. The same model can appear multiple times with different reasoning effort levels, producing distinct evaluation runs.
+
+### Task Discovery Contract
+
+The `task_registry.py` module scans `tasks/*/config.json` at startup. Each task must expose:
+
+| Interface | Source | Description |
+|---|---|---|
+| `prompt` | `config.json` → `prompt` | Query string passed to `hermes chat -q` |
+| `skills` | `config.json` → `skills` | Array of `-s` skill names |
+| `timeout` | `config.json` → `timeout` (optional) | Per-task timeout override |
+| `reset()` | `reset.py` → `reset()` function | Callable that clears the environment |
+| `validate()` | `validator.py` → `validate()` function | Returns `{score: float, details: list[str]}` |
+| `fixtures/` | Directory | Reference data for the validator |
+| Custom keys | `config.json` → any additional keys | Available to reset/validator scripts |
+
+### Cost Tracker Strategy Pattern
+
+```python
+class CostTracker(ABC):
+    def snapshot_before(self) -> float: ...
+    def snapshot_after(self) -> float: ...
+    def calculate_cost(self, model: str, metrics: dict) -> float: ...
+    def needs_post_run_wait(self) -> bool: ...
+
+def create_cost_tracker(provider: str, api_key: str = "") -> CostTracker: ...
+```
+
+Each provider implements its own subclass. The factory function maps provider names to tracker implementations. Unknown providers fall back to a no-op tracker that returns `0.0`.
+
+### Hermes CLI Invocation
+
+```bash
+# Optional: Set reasoning effort prior to chat if configured
+hermes -p eval config set agent.reasoning_effort <effort>
+
+hermes -p eval chat \
+    -q "prompt text..." \
+    -m "anthropic/claude-3.5-sonnet" \
+    --provider "openrouter" \
+    -s "skill1" -s "skill2" \
+    -Q
+```
+
+**Session ID extraction**: First line of `-Q` output contains `session_id: <ID>`. Fallback regex: `\b(\d{8}_\d{6}_[a-f0-9]{6})\b`.
+
+**Metrics extraction**: Query `~/.hermes/profiles/eval/state.db` → `sessions` table by session ID.
+
+### Results Persistence
+
+The harness outputs the result to a local `eval_results.csv` file using a standard 26-field schema. If the `google_sheets` configuration is provided, it will also append the same 26-field row to the specified Google Spreadsheet using a pre-authorized OAuth2 token file via `gspread`. If the target sheet is completely empty, the harness auto-initializes a header row with the 26-field names before appending the first result. In the event of a network or authentication error when writing to Google Sheets, the harness logs a warning to the console and continues without crashing, preserving the local CSV backup.
+
+### Google Sheets Token Generation (Local Machine Only)
+
+The `sheets.py` module exports a `generate_google_token(client_secret_path, token_output_path)` helper function. This function:
+1. Reads the OAuth2 client secrets JSON file from the `client_secret_path` argument (e.g. `~/.hermes/google_client_secret.json`).
+2. Runs the `gspread.oauth()` flow (which opens a browser for authorization).
+3. Writes the resulting `authorized_user.json` token to `token_output_path`.
+
+This must be run once on a machine with a browser. The resulting token file is then copied to the RPi at the path specified by `token_path` in `config.json`.
+
+### Metrics Schema Mapping
+
+| Spec Field | Source |
+|---|---|
+| `timestamp` | `time.time()` at run start |
+| `datetime` | `datetime.now().isoformat()` |
+| `provider` | From model config |
+| `model` | From model config |
+| `reasoning_effort` | From `state.db` → `model_config` JSON → `reasoning_config.effort` |
+| `config_name` | `f"{model_short} ({reasoning_effort})"` |
+| `task` | Task directory name |
+| `run_number` | Loop counter |
+| `session_id` | Extracted from CLI output |
+| `input_tokens` | `sessions.input_tokens` |
+| `output_tokens` | `sessions.output_tokens` |
+| `cache_read_tokens` | `sessions.cache_read_tokens` |
+| `cache_write_tokens` | `sessions.cache_write_tokens` |
+| `reasoning_tokens` | `sessions.reasoning_tokens` |
+| `total_tokens` | Sum of input + output + cache_read + cache_write |
+| `api_calls` | `sessions.api_call_count` |
+| `tool_calls` | `sessions.tool_call_count` |
+| `message_count` | `sessions.message_count` |
+| `elapsed_seconds` | `ended_at - started_at` |
+| `estimated_cost` | `sessions.estimated_cost_usd` |
+| `actual_cost` | From cost tracker strategy |
+| `validation_score` | From task validator |
+| `validation_details` | From task validator |
+| `agent_output` | CLI stdout |
+| `transcript_path` | Path to exported JSON transcript |
+
+---
+
+## Complexity Tracking
+
+| Decision | Why | Simpler Alternative Rejected Because |
+|---|---|---|
+| Task discovery via filesystem scan | Enables zero-config task registration | Hardcoded task lists require harness changes for each new task |
+| Cost tracker strategy pattern | Providers have fundamentally different billing APIs | Unified tracker would require branching logic inside a single class |
+| Separate `executor.py` module | Isolates subprocess management and session ID parsing | Keeping it in harness.py makes the main loop harder to read and test |

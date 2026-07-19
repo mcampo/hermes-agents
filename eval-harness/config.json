@@ -1,0 +1,16 @@
+{
+  "models": [
+    {
+      "model": "deepseek-v4-flash",
+      "provider": "deepseek",
+      "reasoning_effort": "high"
+    }
+  ],
+  "runs": 1,
+  "eval_profile": "eval",
+  "google_sheets": {
+    "spreadsheet_id": "1Qvybe0z_QoI698DRfP1uCjF9f0BcrWLuriaw976mOZs",
+    "sheet_name": "Results2",
+    "token_path": "~/.hermes/google_token.json"
+  }  
+}
