@@ -11,9 +11,21 @@ def load_config() -> Dict[str, Any]:
     with open(config_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def load_api_key(provider: str) -> str:
+def load_api_key(provider: str, profile: str = "eval") -> str:
     env_var = f"{provider.upper()}_API_KEY"
-    return os.environ.get(env_var, "")
+    val = os.environ.get(env_var)
+    if val:
+        return val
+        
+    env_file = Path.home() / ".hermes" / "profiles" / profile / ".env"
+    if env_file.exists():
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith(f"{env_var}="):
+                    return line.split("=", 1)[1].strip(" '\"")
+                    
+    return ""
 
 def load_sheets_config() -> Optional[Dict[str, Any]]:
     try:

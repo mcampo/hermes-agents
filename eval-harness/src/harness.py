@@ -61,7 +61,7 @@ def main():
     for m in model_configs:
         provider = m.get("provider", "")
         if provider not in trackers:
-            api_key = load_api_key(provider)
+            api_key = load_api_key(provider, eval_profile)
             trackers[provider] = create_cost_tracker(provider, api_key)
             
     for task in selected_tasks:
@@ -72,7 +72,9 @@ def main():
                 reasoning_effort = m.get("reasoning_effort")
                 config_name = f"{model_name} ({reasoning_effort})" if reasoning_effort else model_name
                 
+                print("\n" + "=" * 80)
                 print(f"Running task={task.name} run={run_num} model={config_name}")
+                print("=" * 80)
                 
                 task.reset()
                 
@@ -80,8 +82,8 @@ def main():
                 if tracker:
                     tracker.snapshot_before()
                 
-                timestamp = time.time()
-                dt_iso = datetime.now().isoformat()
+                timestamp = int(time.time())
+                dt_iso = datetime.now().replace(microsecond=0).isoformat()
                 
                 timeout = task.timeout if task.timeout else args.timeout
                 
@@ -100,11 +102,11 @@ def main():
                 session_id = exec_result.get("session_id")
                 if not session_id:
                     print(f"  Failed to extract session ID. Error: {exec_result.get('error')}")
-                    continue
+                    session_id = "N/A"
                     
                 if tracker and tracker.needs_post_run_wait():
                     print("  Waiting for cost reconciliation...")
-                    time.sleep(5)
+                    time.sleep(120)
                 
                 metrics = get_session_metrics(eval_profile, session_id)
                 if not metrics:
@@ -118,7 +120,14 @@ def main():
                     
                 val_result = task.validate(exec_result.get("output", ""))
                 
-                transcript_path = dump_session(session_id, sessions_dir, eval_profile)
+                if session_id != "N/A":
+                    transcript_path = dump_session(session_id, sessions_dir, eval_profile)
+                else:
+                    transcript_path = "N/A"
+                
+                is_timeout = exec_result.get("error") == "TimeoutExpired"
+                missing_val = "N/A" if (session_id == "N/A" or is_timeout) else 0
+                missing_float = "N/A" if (session_id == "N/A" or is_timeout) else 0.0
                 
                 row = {
                     "timestamp": timestamp,
@@ -130,18 +139,18 @@ def main():
                     "task": task.name,
                     "run_number": run_num,
                     "session_id": session_id,
-                    "input_tokens": metrics.get("input_tokens", 0),
-                    "output_tokens": metrics.get("output_tokens", 0),
-                    "cache_read_tokens": metrics.get("cache_read_tokens", 0),
-                    "cache_write_tokens": metrics.get("cache_write_tokens", 0),
-                    "reasoning_tokens": metrics.get("reasoning_tokens", 0),
-                    "total_tokens": metrics.get("total_tokens", 0),
-                    "api_calls": metrics.get("api_call_count", 0),
-                    "tool_calls": metrics.get("tool_call_count", 0),
-                    "message_count": metrics.get("message_count", 0),
-                    "elapsed_seconds": metrics.get("elapsed_seconds", 0.0),
-                    "estimated_cost": metrics.get("estimated_cost_usd", 0.0),
-                    "actual_cost": actual_cost,
+                    "input_tokens": metrics.get("input_tokens", missing_val),
+                    "output_tokens": metrics.get("output_tokens", missing_val),
+                    "cache_read_tokens": metrics.get("cache_read_tokens", missing_val),
+                    "cache_write_tokens": metrics.get("cache_write_tokens", missing_val),
+                    "reasoning_tokens": metrics.get("reasoning_tokens", missing_val),
+                    "total_tokens": metrics.get("total_tokens", missing_val),
+                    "api_calls": metrics.get("api_call_count", missing_val),
+                    "tool_calls": metrics.get("tool_call_count", missing_val),
+                    "message_count": metrics.get("message_count", missing_val),
+                    "elapsed_seconds": exec_result.get("elapsed", missing_float),
+                    "estimated_cost": metrics.get("estimated_cost_usd", missing_float),
+                    "actual_cost": actual_cost if actual_cost != 0.0 else (missing_float if not metrics else 0.0),
                     "validation_score": val_result.get("score", 0.0),
                     "validation_details": val_result.get("details", []),
                     "agent_output": exec_result.get("output", ""),

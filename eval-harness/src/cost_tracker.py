@@ -14,19 +14,34 @@ class CostTracker(ABC):
 class OpenRouterCostTracker(CostTracker):
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.before_balance = 0.0
-        self.after_balance = 0.0
+        self.before_usage = 0.0
+        self.after_usage = 0.0
+        
+    def _fetch_usage(self) -> float:
+        import requests
+        try:
+            response = requests.get(
+                "https://openrouter.ai/api/v1/auth/key",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                timeout=10
+            )
+            if response.status_code == 200:
+                data = response.json().get("data", {})
+                return float(data.get("usage", 0.0))
+        except Exception:
+            pass
+        return 0.0
         
     def snapshot_before(self) -> float:
-        self.before_balance = 0.0
-        return self.before_balance
+        self.before_usage = self._fetch_usage()
+        return self.before_usage
         
     def snapshot_after(self) -> float:
-        self.after_balance = 0.0
-        return self.after_balance
+        self.after_usage = self._fetch_usage()
+        return self.after_usage
         
     def calculate_cost(self, model: str, metrics: Dict[str, Any]) -> float:
-        return self.before_balance - self.after_balance
+        return self.after_usage - self.before_usage
         
     def needs_post_run_wait(self) -> bool:
         return True
@@ -36,8 +51,7 @@ class DeepSeekCostTracker(CostTracker):
     def snapshot_after(self) -> float: return 0.0
     
     def calculate_cost(self, model: str, metrics: Dict[str, Any]) -> float:
-        from pricing import calculate_deepseek_cost
-        return calculate_deepseek_cost(model, metrics)
+        return float(metrics.get("estimated_cost_usd", 0.0) or 0.0)
         
     def needs_post_run_wait(self) -> bool:
         return False

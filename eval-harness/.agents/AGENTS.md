@@ -6,6 +6,7 @@ This is an **evaluation harness** for the `hermes` AI agent CLI. It runs configu
 
 The harness runs on a **headless Raspberry Pi** (`mcampo@hermes.local`) where the `hermes` CLI is installed at `~/.local/bin/hermes`.
 
+**Note**: The core `hermes-agent` source code repository is checked out at `../hermes-agent` (a sibling directory to this repo). You can reference it to understand how the `hermes` CLI, profiles, or internal APIs behave.
 ## Spec-Driven Development
 
 This project follows a **spec-driven development workflow**. Before making code changes:
@@ -48,7 +49,6 @@ This project follows a **spec-driven development workflow**. Before making code 
 | `task_registry.py` | Discovers tasks from `tasks/*/config.json` |
 | `metrics.py` | Reads token/cost metrics from `~/.hermes/profiles/eval/state.db` |
 | `cost_tracker.py` | Abstract cost tracking with provider-specific strategies |
-| `pricing.py` | Token pricing data per model |
 | `results.py` | CSV writer with the 26-field schema (`FIELDNAMES`) |
 | `sheets.py` | Google Sheets persistence + `generate_google_token` helper |
 | `session_logger.py` | Exports chat transcripts from `state.db` |

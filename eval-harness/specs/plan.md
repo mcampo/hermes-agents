@@ -151,7 +151,7 @@ class CostTracker(ABC):
 def create_cost_tracker(provider: str, api_key: str = "") -> CostTracker: ...
 ```
 
-Each provider implements its own subclass. The factory function maps provider names to tracker implementations. Unknown providers fall back to a no-op tracker that returns `0.0`.
+Each provider implements its own subclass. The factory function maps provider names to tracker implementations. For providers where Hermes already computes an accurate cost (e.g. DeepSeek), the tracker reads `estimated_cost_usd` directly from the session metrics. Unknown providers fall back to a no-op tracker that returns `0.0`.
 
 ### Hermes CLI Invocation
 
@@ -208,7 +208,7 @@ This must be run once on a machine with a browser. The resulting token file is t
 | `message_count` | `sessions.message_count` |
 | `elapsed_seconds` | `ended_at - started_at` |
 | `estimated_cost` | `sessions.estimated_cost_usd` |
-| `actual_cost` | From cost tracker strategy |
+| `actual_cost` | From cost tracker strategy (DeepSeek: reuses `sessions.estimated_cost_usd`; OpenRouter: balance snapshot delta) |
 | `validation_score` | From task validator |
 | `validation_details` | From task validator |
 | `agent_output` | CLI stdout |

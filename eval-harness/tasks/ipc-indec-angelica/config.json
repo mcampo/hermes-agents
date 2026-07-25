@@ -1,0 +1,14 @@
+{
+  "prompt": "Update the spreadsheet with the monthly INDEC IPC variation, following the 'ipc-indec-angelica' skill.",
+  "skills": [
+    "ipc-indec-angelica",
+    "google-workspace"
+  ],
+  "timeout": 600,
+  "sheets": {
+    "spreadsheet_id": "1Qvybe0z_QoI698DRfP1uCjF9f0BcrWLuriaw976mOZs",
+    "target_row": 15,
+    "target_row_label": "Variación mensual IPC",
+    "token_path": "~/.hermes/google_token.json"
+  }
+}

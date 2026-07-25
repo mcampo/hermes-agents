@@ -60,8 +60,7 @@
 
 ### 4a: Cost Tracking (US5 prerequisite)
 
-- [ ] T010 [US5] Create `eval-harness/src/cost_tracker.py` — Define `CostTracker` abstract base class with methods: `snapshot_before() -> float`, `snapshot_after() -> float`, `calculate_cost(model, metrics) -> float`, `needs_post_run_wait() -> bool`. Implement `OpenRouterCostTracker` (balance snapshot via `/api/v1/key` with retry logic), `DeepSeekCostTracker` (offline token-based from `pricing.py` constants), and `NullCostTracker` (returns 0.0 for unknown providers). Factory function: `create_cost_tracker(provider, api_key) -> CostTracker`
-- [ ] T011 [P] [US5] Create `eval-harness/src/pricing.py` — Pricing constants for DeepSeek and any other offline-calculable providers. Function `calculate_deepseek_cost(model, metrics) -> float`
+- [ ] T010 [US5] Create `eval-harness/src/cost_tracker.py` — Define `CostTracker` abstract base class with methods: `snapshot_before() -> float`, `snapshot_after() -> float`, `calculate_cost(model, metrics) -> float`, `needs_post_run_wait() -> bool`. Implement `OpenRouterCostTracker` (balance snapshot via `/api/v1/key` with retry logic), `DeepSeekCostTracker` (returns `estimated_cost_usd` from session metrics, since Hermes already calculates this using its built-in pricing tables), and `NullCostTracker` (returns 0.0 for unknown providers). Factory function: `create_cost_tracker(provider, api_key) -> CostTracker`
 
 ### 4b: Results Persistence (US6 prerequisite)
 

@@ -53,7 +53,7 @@ def append_result_to_sheet(row: Dict[str, Any], spreadsheet_id: str, sheet_name:
                 val = json.dumps(val)
             row_list.append(val)
             
-        worksheet.append_row(row_list)
+        worksheet.append_row(row_list, value_input_option="USER_ENTERED")
         print(f"  Successfully appended results to Google Sheet '{sheet_name}'.")
         
     except Exception as e:

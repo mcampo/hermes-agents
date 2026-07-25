@@ -49,7 +49,7 @@ For each task run iteration, the harness must capture and record the following m
     *   `elapsed_seconds`: Total runtime of the agent execution in seconds.
 *   **Cost metrics**:
     *   `estimated_cost` (usd): Cost of the run in USD, estimated locally or from session history.
-    *   `actual_cost` (usd): True financial cost in USD, tracked using provider-specific cost strategies.
+    *   `actual_cost` (usd): True financial cost in USD, tracked using provider-specific cost strategies. For providers where Hermes already computes an accurate cost estimate (e.g. DeepSeek), `actual_cost` reuses the session's `estimated_cost_usd` value.
 *   **Validation metrics**:
     *   `validation_score`: Accuracy/success score between `0.0` and `1.0`.
     *   `validation_details`: String describing validation results and check outcomes.
@@ -118,7 +118,7 @@ Calculate financial costs of evaluation sessions using cost-tracking strategies 
 
 **Acceptance Scenarios**:
 1. **Given** a provider requiring a balance-snapshot cost strategy, **When** executing a run, **Then** the harness delegates to that specific strategy, querying account balances before and after the session (with a configurable delay for API reconciliation) to capture exact actual usage cost.
-2. **Given** a provider requiring an offline token-based pricing strategy, **When** executing a run, **Then** the harness delegates to that specific strategy, querying total tokens from the database and multiplying them by pricing constants to calculate session cost instantly.
+2. **Given** a provider where Hermes already computes an accurate cost estimate in `estimated_cost_usd` (e.g. DeepSeek), **When** executing a run, **Then** the harness's cost tracker reads the session's `estimated_cost_usd` value directly from the database metrics instead of duplicating the pricing calculation.
 3. **Given** multiple different providers configured in the harness, **When** running evaluations, **Then** the harness dynamically matches and executes the specific cost strategy implemented for each provider.
 
 ---
