@@ -166,3 +166,36 @@ Persist evaluation results directly to a Google Spreadsheet.
 3. **Given** a network or authentication failure during Google Sheets persistence, **When** executing a run, **Then** the harness logs a warning to the console and continues without crashing, preserving the local CSV backup.
 4. **Given** a local machine with a browser and the `google_client_secret.json` file, **When** running the `generate_google_token` helper from `sheets.py`, **Then** it performs the OAuth2 flow and writes the `authorized_user.json` token file that can be copied to the RPi.
 
+
+---
+
+### User Story 9 - Executed Benchmark Traceability (Priority: P1)
+
+Persist immutable, machine-readable execution metadata for benchmark-aware
+tasks without putting task-specific logic in the harness.
+
+**Why this priority**: A result row and transcript must be attributable to the
+fixture, scoring revision, and pinned source hashes that were in effect before
+the model ran.
+
+**Independent Test**: Run a task with a declared benchmark manifest and verify
+that its session sidecar contains the pre-execution metadata, current session
+and model configuration, recorded score, and transcript path. Run a task with
+no declaration and verify that no sidecar is written.
+
+**Acceptance Scenarios**:
+1. **Given** a task declaring optional benchmark metadata in `config.json`,
+   **When** the harness starts a run, **Then** it reads and snapshots the
+   selected manifest fields before the model execution and never mutates the
+   source manifest.
+2. **Given** validation and transcript persistence succeed for a session,
+   **When** the CSV row is persisted, **Then** the harness atomically writes
+   `<session_id>.benchmark.json` next to the transcript with the snapshot,
+   session/model configuration, recorded score, transcript path, and any
+   harness-provided runtime artifact paths.
+3. **Given** validation or transcript persistence fails, **When** a complete
+   executed record cannot be formed, **Then** no sidecar is written. A sidecar
+   serialization or replacement failure must not leave a partial file.
+4. **Given** later human review, **When** annotations such as rescores or
+   findings are needed, **Then** they are stored by a separate review process
+   and are not written by the execution path.

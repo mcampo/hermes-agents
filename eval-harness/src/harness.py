@@ -3,6 +3,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 import sys
+import re
+import uuid
 
 # Add src to python path so we can import modules
 sys.path.insert(0, str(Path(__file__).parent))
@@ -15,6 +17,58 @@ from cost_tracker import create_cost_tracker
 from session_logger import dump_session
 from results import save_result_csv
 from sheets import append_result_to_sheet
+from benchmark_sidecar import capture_benchmark_metadata, persist_executed_sidecar
+
+
+_ENVIRONMENT_VARIABLE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def allocate_runtime_artifacts(task, results_dir: Path, run_id: str) -> dict[str, str]:
+    """Allocate task-declared, harness-owned directories for one model run."""
+    config = task.config.get("runtime_artifacts", {})
+    if config in (None, {}):
+        return {}
+    if not isinstance(config, dict):
+        raise ValueError("runtime_artifacts must be an object")
+    environment: dict[str, str] = {}
+    for variable, category in config.items():
+        if not isinstance(variable, str) or not _ENVIRONMENT_VARIABLE.fullmatch(variable):
+            raise ValueError("runtime artifact environment variable is invalid")
+        if not isinstance(category, str) or not category:
+            raise ValueError(f"runtime artifact category for {variable} must be a relative path")
+        relative = Path(category)
+        if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
+            raise ValueError(f"runtime artifact category for {variable} must be a safe relative path")
+        destination = results_dir / relative / task.name / run_id
+        destination.mkdir(parents=True, exist_ok=False)
+        environment[variable] = str(destination)
+    return environment
+
+
+def persist_result_and_sidecar(
+    row: dict,
+    results_csv_path: Path,
+    sessions_dir: Path,
+    captured_metadata: dict | None,
+    *,
+    run_id: str,
+    runtime_artifacts: dict[str, str],
+) -> Path | None:
+    """Persist the CSV row, then an opted-in sidecar only for a real transcript."""
+    save_result_csv(row, results_csv_path)
+    if captured_metadata is None or row.get("session_id") == "N/A":
+        return None
+    transcript_path = Path(str(row.get("transcript_path") or ""))
+    if not transcript_path.is_file():
+        raise RuntimeError("cannot write benchmark sidecar without a persisted transcript")
+    return persist_executed_sidecar(
+        sessions_dir,
+        captured_metadata,
+        row,
+        run_id=run_id,
+        runtime_artifacts=runtime_artifacts,
+    )
+
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluation Harness")
@@ -76,7 +130,10 @@ def main():
                 print(f"Running task={task.name} run={run_num} model={config_name}")
                 print("=" * 80)
                 
+                run_id = uuid.uuid4().hex
+                runtime_artifacts = allocate_runtime_artifacts(task, results_csv_path.parent, run_id)
                 task.reset()
+                captured_benchmark_metadata = capture_benchmark_metadata(task)
                 
                 tracker = trackers.get(provider)
                 if tracker:
@@ -94,7 +151,8 @@ def main():
                     prompt=task.prompt,
                     skills=task.skills,
                     profile=eval_profile,
-                    timeout=timeout
+                    timeout=timeout,
+                    extra_env=runtime_artifacts,
                 )
                 
                 print(f"  Execution result: {exec_result}")
@@ -157,7 +215,13 @@ def main():
                     "transcript_path": str(transcript_path)
                 }
                 
-                save_result_csv(row, results_csv_path)
+                sidecar = persist_result_and_sidecar(
+                    row, results_csv_path, sessions_dir, captured_benchmark_metadata,
+                    run_id=run_id,
+                    runtime_artifacts=runtime_artifacts,
+                )
+                if sidecar:
+                    print(f"  Benchmark sidecar: {sidecar}")
                 
                 sheets_config = load_sheets_config()
                 if sheets_config:

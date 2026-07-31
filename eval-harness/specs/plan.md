@@ -223,3 +223,21 @@ This must be run once on a machine with a browser. The resulting token file is t
 | Task discovery via filesystem scan | Enables zero-config task registration | Hardcoded task lists require harness changes for each new task |
 | Cost tracker strategy pattern | Providers have fundamentally different billing APIs | Unified tracker would require branching logic inside a single class |
 | Separate `executor.py` module | Isolates subprocess management and session ID parsing | Keeping it in harness.py makes the main loop harder to read and test |
+
+## Benchmark Traceability Extension
+
+Tasks may expose optional `benchmark_metadata` and `runtime_artifacts` through
+their configuration. The former names a task-local JSON manifest and explicit
+top-level fields; the harness JSON-snapshots those fields and the manifest hash
+after reset but before `hermes chat`. The latter directly maps environment
+variables to relative artifact categories. The harness creates a unique retained
+`results/<category>/<task>/<run-id>/` directory and passes it to the model
+process.
+
+After validation, transcript export, and local CSV persistence, an opted-in
+session writes `results/sessions/<session_id>.benchmark.json` with only
+executed metadata: the immutable manifest snapshot and source hash, run/session
+and model configuration, recorded score, transcript path, and run artifact
+paths. The writer uses atomic replacement and cleans temporary files on error.
+It never writes later review annotations. Tasks without the optional descriptor
+do not receive a sidecar.

@@ -87,3 +87,28 @@ Each task must supply reference fixtures representing the expected outcomes to s
 
 **Acceptance Scenarios**:
 1. **Given** a task implementation, **When** inspecting the `fixtures` directory, **Then** there is a structured data file (e.g. JSON, CSV, or YAML) listing the expected final state entries (such as cell values, uploaded filenames, or read states) for comparison.
+
+## Optional Harness Traceability Configuration
+
+A task that needs an executed benchmark sidecar may declare these optional,
+task-agnostic fields in `config.json`:
+
+```json
+{
+  "benchmark_metadata": {
+    "manifest_path": "benchmark-manifest.json",
+    "include": ["fixture_revision", "scoring_revision"]
+  },
+  "runtime_artifacts": {
+    "TASK_LEDGER_DIR": "ledgers"
+  }
+}
+```
+
+`manifest_path` is relative to the task directory and `include` is an explicit
+allowlist of top-level JSON fields. The harness snapshots only those fields
+before model execution. `runtime_artifacts` maps task-defined environment
+variables directly to relative directory categories; the harness allocates a
+distinct directory for every run and passes it to the model process. These
+fields are optional, so tasks without them keep the minimal interface and do
+not receive benchmark sidecars or runtime directories.

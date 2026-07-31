@@ -1,0 +1,12 @@
+{
+  "fixture_revision": "eval-label-v2-july",
+  "scoring_revision": "gastos-vencimientos-v5",
+  "expected_json_sha256": "d0ee130c7fc423667897f91fde1423ea98cf538456e93e338b13637428903771",
+  "validator_sha256": "a151259fab79554f0f3784b1e995fe48ffb14bde5881b53006e0d2e0aeb779cf",
+  "google_helper_sha256": "401373a538a6469fe01f1ec253812f64ec794210be5f70b632aac84a993054e5",
+  "evaluation_skill_tree_sha256": "37dbf65b3145a33b4666afdc17922893d206bb5d9b4d87528cdf1bcb18359e62",
+  "skill_checksum_method": "from skill/: sort relative file paths, excluding __pycache__ and *.pyc; run sha256sum in that order; SHA-256 the resulting records",
+  "reviewed_date": "2026-07-29",
+  "benchmark_status": "rerun_required",
+  "compatibility_note": "v5 adds semantic final-report negation handling, harness-executed sidecars, and run-scoped ledger retention; v4 and v5 scores are not directly comparable for final-report deductions until models are rerun from a verified reset"
+}

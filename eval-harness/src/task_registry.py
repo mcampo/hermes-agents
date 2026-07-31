@@ -14,6 +14,7 @@ class Task:
     reset: Callable[[], None]
     validate: Callable[[str], Dict[str, Any]]
 
+    task_dir: Path
 def load_module_from_path(module_name: str, file_path: Path):
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     if spec and spec.loader:
@@ -73,7 +74,8 @@ def discover_tasks(tasks_dir: Path) -> List[Task]:
             timeout=timeout,
             config=config,
             reset=reset_func,
-            validate=validate_func
+            validate=validate_func,
+            task_dir=task_path.resolve(),
         ))
 
     return tasks

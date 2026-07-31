@@ -1,0 +1,42 @@
+{
+  "prompt": "Process unread due-date emails per skill 'gastos-vencimientos'.",
+  "skills": [
+    "gastos-vencimientos",
+    "google-workspace"
+  ],
+  "timeout": 900,
+  "benchmark_metadata": {
+    "manifest_path": "benchmark-manifest.json",
+    "include": [
+      "fixture_revision",
+      "scoring_revision",
+      "expected_json_sha256",
+      "validator_sha256",
+      "google_helper_sha256",
+      "evaluation_skill_tree_sha256",
+      "skill_checksum_method"
+    ]
+  },
+  "runtime_artifacts": {
+    "GASTOS_VENCIMIENTOS_LEDGER_DIR": "ledgers"
+  },
+  "google": {
+    "token_path": "~/.hermes/google_token.json"
+  },
+  "gmail": {
+    "account": "mcampo.agents@gmail.com",
+    "label": "eval",
+    "expected_count": 5,
+    "query": "label:eval is:unread (\"resumen de cuenta\" OR \"resumen de tarjeta\" OR resumen OR mastercard OR visa OR pago OR vencimiento OR factura OR expensas OR servicios OR servicio OR boleta OR deuda)",
+    "production_query": "is:unread newer_than:30d (\"resumen de cuenta\" OR \"resumen de tarjeta\" OR resumen OR mastercard OR visa OR pago OR vencimiento OR factura OR expensas OR servicios OR servicio OR boleta OR deuda)"
+  },
+  "sheets": {
+    "spreadsheet_id": "1Qvybe0z_QoI698DRfP1uCjF9f0BcrWLuriaw976mOZs",
+    "worksheet_title": "Aux - Previsión",
+    "sheet_id": 1359523290
+  },
+  "drive": {
+    "root_name": "Hermes Eval - Vencimientos",
+    "root_id": "1zpLE3gXabspesoSPjkO-gGJDZZmF1zXk"
+  }
+}

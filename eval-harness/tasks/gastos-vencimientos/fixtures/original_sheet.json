@@ -1,0 +1,128 @@
+[
+  [
+    "",
+    "Junio",
+    "",
+    "",
+    "",
+    "Julio",
+    "",
+    "",
+    "",
+    "Agosto",
+    "",
+    "",
+    "",
+    "Septiembre",
+    "",
+    "",
+    "",
+    "Octubre",
+    "",
+    "",
+    "",
+    "Noviembre",
+    "",
+    "",
+    "",
+    "Diciembre"
+  ],
+  [
+    "",
+    "Día Vencimiento",
+    "Manual / Automático",
+    "Monto",
+    "Monto USD",
+    "Día Vencimiento",
+    "Manual / Automático",
+    "Monto",
+    "Monto USD",
+    "Día Vencimiento",
+    "Manual / Automático",
+    "Monto",
+    "Monto USD",
+    "Día Vencimiento",
+    "Manual / Automático",
+    "Monto",
+    "Monto USD",
+    "Día Vencimiento",
+    "Manual / Automático",
+    "Monto",
+    "Monto USD",
+    "Día Vencimiento",
+    "Manual / Automático",
+    "Monto",
+    "Monto USD",
+    "Día Vencimiento",
+    "Manual / Automático",
+    "Monto",
+    "Monto USD"
+  ],
+  [
+    "Gas"
+  ],
+  [
+    "Visa",
+    26,
+    "M",
+    "=5306400,91-2946385,63",
+    6840.33
+  ],
+  [
+    "Cochera",
+    5,
+    "M",
+    220000
+  ],
+  [
+    "Seguro Auto",
+    5,
+    "A",
+    283174.6
+  ],
+  [
+    "Angélica",
+    5,
+    "M",
+    822012
+  ],
+  [
+    "Mastercard",
+    19,
+    "M",
+    0,
+    1731.24
+  ],
+  [
+    "Tarjeta MP",
+    17,
+    "A",
+    106663,
+    0
+  ],
+  [
+    "Expensas",
+    9,
+    "",
+    174056.11
+  ],
+  [
+    "Agua",
+    16,
+    "A",
+    33136.68
+  ],
+  [
+    "ABL",
+    12,
+    "M",
+    35515.04
+  ],
+  [
+    "Total",
+    "",
+    "",
+    "=SUM(D3:D12)",
+    "=SUM(E3:E12)"
+  ]
+]

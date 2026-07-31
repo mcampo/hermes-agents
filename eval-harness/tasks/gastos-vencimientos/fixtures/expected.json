@@ -1,0 +1,155 @@
+{
+  "fixture_revision": "eval-label-v2-july",
+  "expected_email_count": 5,
+  "expected_all_read": true,
+  "scoring_weights": {
+    "sheet_target_dispatch": 0.1,
+    "due_day_manual_auto": 0.1,
+    "ars_semantics": 0.15,
+    "usd_semantics": 0.1,
+    "drive_archival": 0.2,
+    "gmail_lifecycle": 0.15,
+    "multi_service_completeness": 0.05,
+    "no_collateral_changes": 0.1,
+    "final_report": 0.05
+  },
+  "expected_items": [
+    {
+      "type": "mercado_pago",
+      "subject_contains": "Debitaremos el total de tu tarjeta",
+      "expected_final_unread": false,
+      "expected_sheet_rows": [
+        {
+          "service": "Tarjeta MP",
+          "month": "Julio",
+          "range": "'Aux - Previsión'!F9:I9",
+          "due_day": 17,
+          "manual_auto": "A",
+          "ars_raw": 45600,
+          "ars_formatted": "$45.600",
+          "usd_raw": 0,
+          "usd_formatted": "0"
+        }
+      ],
+      "expected_drive_files": [
+        {
+          "name": "Mercado Pago - Resumen 2026-07 (vence 17-07-26).pdf",
+          "year": "2026",
+          "month": "Julio"
+        }
+      ]
+    },
+    {
+      "type": "pago_mis_cuentas_digest",
+      "subject_contains": "Servicios por Vencer",
+      "expected_final_unread": false,
+      "expected_sheet_rows": [
+        {
+          "service": "Agua",
+          "month": "Julio",
+          "range": "'Aux - Previsión'!F11:I11",
+          "due_day": 13,
+          "manual_auto": "A",
+          "ars_raw": 34236.32,
+          "ars_formatted": "$34.236",
+          "usd_raw": "",
+          "usd_formatted": ""
+        }
+      ],
+      "expected_drive_files": [
+        {
+          "name": "PagoMisCuentas - Agua 2026-07.eml",
+          "year": "2026",
+          "month": "Julio"
+        }
+      ]
+    },
+    {
+      "type": "visa",
+      "subject_contains": "Resumen de Cuenta VISA",
+      "expected_final_unread": false,
+      "expected_sheet_rows": [
+        {
+          "service": "Visa",
+          "month": "Julio",
+          "range": "'Aux - Previsión'!F4:I4",
+          "due_day": 24,
+          "manual_auto": "M",
+          "ars_raw": "=3453744,11-32654,27",
+          "ars_formatted": "$3.421.090",
+          "usd_raw": 73.82,
+          "usd_formatted": "73,82"
+        }
+      ],
+      "expected_drive_files": [
+        {
+          "name": "Visa - Resumen 2026-07 (vence 24-07-26).pdf",
+          "year": "2026",
+          "month": "Julio"
+        }
+      ]
+    },
+    {
+      "type": "mastercard",
+      "subject_contains": "Resumen de Tarjeta MasterCard",
+      "expected_final_unread": false,
+      "expected_sheet_rows": [
+        {
+          "service": "Mastercard",
+          "month": "Julio",
+          "range": "'Aux - Previsión'!F8:I8",
+          "due_day": 17,
+          "manual_auto": "M",
+          "ars_raw": 0,
+          "ars_formatted": "$0",
+          "usd_raw": 249.82,
+          "usd_formatted": "249,82"
+        }
+      ],
+      "expected_drive_files": [
+        {
+          "name": "Mastercard - Resumen 2026-07 (vence 17-07-26).pdf",
+          "year": "2026",
+          "month": "Julio"
+        }
+      ]
+    },
+    {
+      "type": "expensas",
+      "subject_contains": "Expensas Período JUNIO-2026",
+      "expected_final_unread": false,
+      "expected_sheet_rows": [
+        {
+          "service": "Expensas",
+          "month": "Julio",
+          "range": "'Aux - Previsión'!F10:I10",
+          "due_day": 10,
+          "manual_auto": "",
+          "ars_raw": 306017.11,
+          "ars_formatted": "$306.017",
+          "usd_raw": "",
+          "usd_formatted": ""
+        }
+      ],
+      "expected_drive_files": [
+        {
+          "name": "Expensas - Liquidacion 2026-06 (vence 10-07-26).pdf",
+          "year": "2026",
+          "month": "Julio"
+        },
+        {
+          "name": "Expensas - Recibo 2026-06.pdf",
+          "year": "2026",
+          "month": "Julio"
+        }
+      ]
+    }
+  ],
+  "allowed_sheet_ranges": [
+    "'Aux - Previsión'!F4:I4",
+    "'Aux - Previsión'!F8:I8",
+    "'Aux - Previsión'!F9:I9",
+    "'Aux - Previsión'!F10:I10",
+    "'Aux - Previsión'!F11:I11"
+  ]
+}

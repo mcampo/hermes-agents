@@ -1,9 +1,14 @@
 import subprocess
 import re
 import time
+import os
 from typing import Dict, Any, List, Optional
 
-def run_hermes(model: str, provider: str, reasoning_effort: Optional[str], prompt: str, skills: List[str], profile: str, timeout: int) -> Dict[str, Any]:
+def run_hermes(
+    model: str, provider: str, reasoning_effort: Optional[str], prompt: str,
+    skills: List[str], profile: str, timeout: int,
+    extra_env: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
     if reasoning_effort:
         config_cmd = ["hermes", "-p", profile, "config", "set", "agent.reasoning_effort", reasoning_effort]
         try:
@@ -37,13 +42,19 @@ def run_hermes(model: str, provider: str, reasoning_effort: Optional[str], promp
         "error": None
     }
     
+    execution_env = None
+    if extra_env:
+        execution_env = os.environ.copy()
+        execution_env.update({key: str(value) for key, value in extra_env.items()})
+
     start_time = time.time()
     try:
         proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=timeout
+            timeout=timeout,
+            env=execution_env,
         )
         result["output"] = proc.stdout.rstrip('\r\n') if proc.stdout else ""
         result["exit_code"] = proc.returncode

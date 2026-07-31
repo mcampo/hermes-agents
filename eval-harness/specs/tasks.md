@@ -121,3 +121,25 @@ The mock task asks Hermes a simple deterministic question (e.g., "echo the exact
 
 **Checkpoint**: Running with `google_sheets` config and a valid token file correctly populates a spreadsheet with matching column layout to `eval_results.csv`, auto-initializes header on empty sheet, and does not crash if token is missing or network is unavailable.
 
+
+---
+
+## Phase 8: Benchmark Execution Sidecars (US9)
+
+**Purpose**: Persist an immutable execution record for tasks that opt in with
+a manifest descriptor, without adding task-specific conditions to the harness.
+
+- [x] T028 [US9] Add `src/benchmark_sidecar.py` with manifest snapshot
+  validation and atomic JSON sidecar writing. It must remove temporary files
+  on serialization/write failure and never emit review annotations.
+- [x] T029 [US9] Extend `task_registry.py`, `executor.py`, and `harness.py`
+  to retain each task's directory and configuration, allocate a harness run ID
+  and per-run directories from optional descriptors, pass declared environment
+  values to Hermes, and persist a sidecar after transcript and CSV persistence.
+- [x] T030 [P] [US9] Add local unit tests for opted-in and opted-out tasks,
+  atomic replacement, serialization errors, validation/transcript failures,
+  and exact session/score/transcript association.
+
+**Checkpoint**: Every opted-in completed session has one atomic executed
+sidecar bound to its CSV row and transcript; tasks without the declaration
+remain unaffected.
