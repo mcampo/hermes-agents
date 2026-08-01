@@ -1,6 +1,8 @@
 ---
 description: Sync the eval harness to the remote Raspberry Pi; run it only when explicitly requested.
 mode: subagent
+model: openai/gpt-5.6-luna
+variant: xhigh
 permission:
   edit: deny
   lsp: deny
