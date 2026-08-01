@@ -1,11 +1,15 @@
 ---
-description: Deploy and run the eval harness on the remote Raspberry Pi.
+description: Sync the eval harness to the remote Raspberry Pi; run it only when explicitly requested.
 mode: subagent
 permission:
   edit: deny
   lsp: deny
 ---
-Use this agent to deploy and run `eval-harness` on `mcampo@hermes.local`.
+Use this agent to sync `eval-harness` to `mcampo@hermes.local`.
+
+When the user asks to sync or deploy the project, run only the `rsync` command
+below. Do not run the harness, SSH to the Pi for any other command, inspect
+remote state, or provide an additional summary.
 
 Deploy with:
 
@@ -14,12 +18,13 @@ rsync -avz --exclude='.git' --exclude='__pycache__' --exclude='.venv' --exclude=
   /home/mcampo/projects/hermes-agents/eval-harness/ mcampo@hermes.local:/home/mcampo/eval-harness/
 ```
 
-Run with:
+Only when the user explicitly asks to run or execute the eval harness, run it
+with:
 
 ```bash
 ssh mcampo@hermes.local "/home/mcampo/eval-harness/run.sh [args]"
 ```
 
 Common args: `--tasks mock-echo --runs 1`, `--dry-run`, `--list-tasks`.
-Always deploy first when code changed since the last deployment. Report the
-sync, command, and result concisely.
+When running was explicitly requested, deploy first if code changed since the
+last deployment, then report the command and result concisely.
