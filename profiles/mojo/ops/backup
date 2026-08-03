@@ -1,0 +1,313 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+umask 077
+
+die() {
+    printf 'hermes-mojo-backup: ERROR: %s\n' "$*" >&2
+    exit 1
+}
+
+[[ "${DRIVE_FOLDER_ID:-}" =~ ^[A-Za-z0-9_-]+$ ]] || die "invalid Drive folder configuration"
+[[ "${BACKUP_ALERT_TO:-}" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || die "invalid failure-alert configuration"
+
+state_dir=${MOJO_BACKUP_STATE_DIR:-$HOME/.local/state/hermes/mojo-backup}
+failed_archive="$state_dir/mojo-backup-failed.tar.gz"
+backup_timezone=America/Argentina/Buenos_Aires
+archive=''
+mojo_was_running=0
+
+log() {
+    printf 'hermes-mojo-backup: %s\n' "$*" >&2
+}
+
+hermes_bin="$HOME/.local/bin/hermes"
+[[ -x "$hermes_bin" ]] || die "hermes is not executable"
+
+gapi_script="$HOME/.hermes/profiles/mojo/skills/productivity/google-workspace/scripts/google_api.py"
+[[ -f "$gapi_script" ]] || die "Google Workspace wrapper not found"
+gapi_home="$HOME/.hermes"
+gapi_python="$HOME/.hermes/.venv-google/bin/python"
+[[ -x "$gapi_python" ]] || die "Google Workspace Python is not executable"
+json_python="$gapi_python"
+
+gapi() {
+    HERMES_HOME="$gapi_home" "$gapi_python" "$gapi_script" "$@"
+}
+
+json_upload_id() {
+    "$json_python" -c '
+import json
+import re
+import sys
+
+try:
+    value = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(1)
+if value.get("status") != "uploaded":
+    raise SystemExit(1)
+file_id = value.get("id")
+if not isinstance(file_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", file_id):
+    raise SystemExit(1)
+print(file_id)
+'
+}
+
+json_status() {
+    local expected=$1
+    "$json_python" -c '
+import json
+import sys
+
+try:
+    value = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(1)
+raise SystemExit(0 if value.get("status") == sys.argv[1] else 1)
+' "$expected"
+}
+
+trash_previous_restore_points() {
+    local name=$1
+    local keep_id=$2
+    local query
+    local search_result
+    local old_id
+    local trash_result
+    local old_ids
+
+    query="name = '$name' and '$DRIVE_FOLDER_ID' in parents and trashed = false"
+    search_result=$(gapi drive search "$query" --raw-query --max 1000)
+    if ! old_ids=$(printf '%s' "$search_result" | "$json_python" -c '
+import json
+import re
+import sys
+
+value = json.load(sys.stdin)
+files = value if isinstance(value, list) else value.get("files", [])
+name, keep_id = sys.argv[1:]
+for item in files:
+    if not isinstance(item, dict) or item.get("name") != name:
+        continue
+    file_id = item.get("id")
+    if isinstance(file_id, str) and re.fullmatch(r"[A-Za-z0-9_-]+", file_id) and file_id != keep_id:
+        print(file_id)
+' "$name" "$keep_id"); then
+        die "could not parse Drive replacement metadata"
+    fi
+
+    while IFS= read -r old_id; do
+        [[ -z "$old_id" || "$old_id" == "$keep_id" ]] && continue
+        log "Trashing the previous ${name} file after replacement."
+        trash_result=$(gapi drive delete "$old_id")
+        printf '%s' "$trash_result" | json_status trashed || die "Drive did not confirm replacement cleanup"
+    done <<< "$old_ids"
+}
+
+preserve_failed_archive() {
+    # ponytail: keep one failed archive; this preserves retry data without local growth.
+    if [[ -n "$archive" && -f "$archive" ]]; then
+        if mv -f -- "$archive" "$failed_archive"; then
+            log "Retained the failed local archive for diagnosis or retry."
+        else
+            log "Could not retain the failed local archive."
+        fi
+    fi
+}
+
+send_failure_email() {
+    local result
+    if result=$(gapi gmail send \
+        --to "$BACKUP_ALERT_TO" \
+        --subject 'Hermes Mojo backup failed' \
+        --body 'Hermes Mojo backup failed. Check journalctl --user -u hermes-mojo-backup.service for full diagnostics.'); then
+        if printf '%s' "$result" | json_status sent; then
+            log "Failure alert sent."
+        else
+            log "Failure alert command returned an unexpected response."
+        fi
+    else
+        log "Failure alert could not be sent."
+    fi
+}
+
+finish() {
+    local rc=$?
+    local restart_output=''
+    local restart_rc=0
+
+    set +e
+    trap - EXIT
+
+    if (( rc != 0 )); then
+        preserve_failed_archive
+    fi
+
+    if (( mojo_was_running == 1 )); then
+        log "Restoring the Mojo gateway after backup."
+        restart_output=$("$hermes_bin" -p mojo gateway start 2>&1)
+        restart_rc=$?
+        if (( restart_rc != 0 )); then
+            log "Mojo gateway restore failed (exit $restart_rc)."
+            printf '%s\n' "$restart_output" >&2
+            rc=1
+        fi
+    fi
+
+    if (( rc != 0 )); then
+        send_failure_email
+    fi
+
+    exit "$rc"
+}
+
+trap finish EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+trap 'exit 129' HUP
+mkdir -p "$state_dir"
+for stale_archive in "$state_dir"/.mojo-backup.*.tar.gz; do
+    [[ -f "$stale_archive" ]] || continue
+    if mv -f -- "$stale_archive" "$failed_archive"; then
+        log "Retained a stale archive from an interrupted run."
+    else
+        log "Could not retain a stale archive; removing it."
+        rm -f -- "$stale_archive"
+    fi
+done
+
+status_output=$("$hermes_bin" profile show mojo)
+if printf '%s\n' "$status_output" | grep -qxF 'Gateway: running'; then
+    mojo_was_running=1
+elif printf '%s\n' "$status_output" | grep -qxF 'Gateway: stopped'; then
+    mojo_was_running=0
+else
+    die "could not determine Mojo gateway status"
+fi
+
+if (( mojo_was_running == 1 )); then
+    log "Stopping the Mojo gateway for a consistent export."
+    "$hermes_bin" -p mojo gateway stop
+fi
+
+archive=$(mktemp "$state_dir/.mojo-backup.XXXXXX.tar.gz")
+rm -f -- "$archive"
+log "Exporting the Mojo profile."
+"$hermes_bin" profile export mojo -o "$archive"
+
+log "Validating gzip and tar integrity."
+gzip -t "$archive"
+tar -tzf "$archive" >/dev/null
+
+"$json_python" - "$archive" <<'PY'
+import sys
+import tarfile
+
+archive_path = sys.argv[1]
+credential_names = {
+    ".env",
+    "auth.json",
+    "client_secret.json",
+    "credentials.json",
+    "google_client_secret.json",
+    "google_token.json",
+    "token.json",
+}
+roots = set()
+with tarfile.open(archive_path, "r:gz") as archive:
+    for member in archive.getmembers():
+        name = member.name.replace("\\", "/")
+        if name.startswith("/") or "\x00" in name:
+            raise SystemExit(f"unsafe archive member: {member.name}")
+        parts = [part for part in name.split("/") if part not in {"", "."}]
+        if not parts or ".." in parts:
+            raise SystemExit(f"unsafe archive member: {member.name}")
+        roots.add(parts[0])
+        if parts[0] != "mojo":
+            raise SystemExit(f"archive has an unexpected top-level path: {member.name}")
+        if member.name and (member.issym() or member.islnk()):
+            raise SystemExit(f"archive contains a link: {member.name}")
+        if not (member.isdir() or member.isfile()):
+            raise SystemExit(f"archive contains an unsupported entry: {member.name}")
+        if parts[-1] in credential_names or parts[-1].startswith(".env"):
+            raise SystemExit(f"archive contains a credential file: {member.name}")
+if roots != {"mojo"}:
+    raise SystemExit("archive must contain exactly one mojo top-level root")
+PY
+
+backup_date=$(TZ="$backup_timezone" date +%F)
+daily_name="mojo-backup-daily-${backup_date}.tar.gz"
+weekly_name="mojo-backup-weekly-${backup_date}.tar.gz"
+
+log "Uploading the daily restore point."
+daily_result=$(gapi drive upload "$archive" \
+    --name "$daily_name" \
+    --parent "$DRIVE_FOLDER_ID" \
+    --mime-type application/gzip)
+daily_id=$(printf '%s' "$daily_result" | json_upload_id)
+trash_previous_restore_points "$daily_name" "$daily_id"
+
+if [[ "$(TZ="$backup_timezone" date +%u)" == 7 ]]; then
+    log "Uploading the weekly restore point."
+    weekly_result=$(gapi drive upload "$archive" \
+        --name "$weekly_name" \
+        --parent "$DRIVE_FOLDER_ID" \
+        --mime-type application/gzip)
+    weekly_id=$(printf '%s' "$weekly_result" | json_upload_id)
+    trash_previous_restore_points "$weekly_name" "$weekly_id"
+fi
+
+rm -f -- "$archive"
+archive=''
+
+prune_drive_kind() {
+    local kind=$1
+    local keep=$2
+    local query
+    local search_result
+    local doomed
+
+    query="'$DRIVE_FOLDER_ID' in parents and trashed = false and name contains 'mojo-backup-${kind}-'"
+    search_result=$(gapi drive search "$query" --raw-query --max 1000)
+    if ! doomed=$(printf '%s' "$search_result" | "$json_python" -c '
+import json
+import re
+import sys
+
+kind = sys.argv[1]
+keep = int(sys.argv[2])
+pattern = re.compile(r"mojo-backup-" + re.escape(kind) + r"-\d{4}-\d{2}-\d{2}\.tar\.gz")
+value = json.load(sys.stdin)
+files = value if isinstance(value, list) else value.get("files", [])
+rows = []
+for item in files:
+    if not isinstance(item, dict):
+        continue
+    name = item.get("name", "")
+    if not isinstance(name, str) or not pattern.fullmatch(name):
+        continue
+    file_id = item.get("id")
+    if not isinstance(file_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", file_id):
+        raise SystemExit(1)
+    rows.append((name, str(item.get("modifiedTime", "")), file_id))
+rows.sort(reverse=True)
+for _, _, file_id in rows[keep:]:
+    print(file_id)
+' "$kind" "$keep"); then
+        die "could not parse Drive retention metadata"
+    fi
+
+    while IFS= read -r file_id; do
+        [[ -z "$file_id" ]] && continue
+        local trash_result
+        log "Trashing an aged-out ${kind} restore point."
+        trash_result=$(gapi drive delete "$file_id")
+        printf '%s' "$trash_result" | json_status trashed || die "Drive did not confirm trashing a restore point"
+    done <<<"$doomed"
+}
+
+log "Applying Drive retention."
+prune_drive_kind daily 7
+prune_drive_kind weekly 4
+log "Mojo backup completed."

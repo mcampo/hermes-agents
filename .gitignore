@@ -1,2 +1,25 @@
 __pycache__/
+*.py[cod]
 eval-harness/results/sessions/*
+
+# Hermes profile runtime credentials never belong in the source tree.
+profiles/**/.env
+profiles/**/auth.json
+profiles/**/token.json
+profiles/**/credentials.json
+profiles/**/client_secret.json
+profiles/**/google_token.json
+profiles/**/google_client_secret.json
+profiles/**/google_oauth_pending.json
+profiles/**/.env.*.local
+profiles/**/state.db*
+profiles/**/sessions/
+profiles/**/memories/
+profiles/**/logs/
+profiles/**/cache/
+profiles/**/audio_cache/
+profiles/**/image_cache/
+profiles/**/sandboxes/
+profiles/**/workspace/
+profiles/**/gateway.*
+profiles/**/config.yaml.bak.*

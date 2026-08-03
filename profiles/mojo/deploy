@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SSH_TARGET="${HERMES_MOJO_SSH_TARGET:-hermes.local}"
+PROFILE_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REMOTE_PROFILE='.hermes/profiles/mojo'
+
+if [[ -z "$SSH_TARGET" ]]; then
+    printf 'HERMES_MOJO_SSH_TARGET must not be empty\n' >&2
+    exit 2
+fi
+
+for command_name in ssh rsync; do
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+        printf 'required command not found: %s\n' "$command_name" >&2
+        exit 2
+    fi
+done
+
+required_files=(
+    config.yaml
+    SOUL.md
+    cron/jobs.json
+)
+required_directories=(
+    scripts
+    skills/custom
+)
+missing=()
+for relative_path in "${required_files[@]}"; do
+    if [[ ! -f "$PROFILE_DIR/$relative_path" ]]; then
+        missing+=("$relative_path")
+    fi
+done
+for relative_path in "${required_directories[@]}"; do
+    if [[ ! -d "$PROFILE_DIR/$relative_path" ]]; then
+        missing+=("$relative_path")
+    fi
+done
+if ((${#missing[@]})); then
+    printf 'cannot deploy: intended Mojo source paths are missing:\n' >&2
+    printf '  %s\n' "${missing[@]}" >&2
+    printf 'Import the exact live definition files first; this script does not invent placeholders.\n' >&2
+    exit 2
+fi
+
+printf 'Mojo definition source: %s\n' "$PROFILE_DIR"
+printf 'SSH target: %s\n' "$SSH_TARGET"
+printf 'Remote profile: $HOME/%s\n' "$REMOTE_PROFILE"
+
+# Bootstrap only the profile directory. The normal create path keeps bundled
+# skills installed; it deliberately does not use --no-skills.
+ssh -- "$SSH_TARGET" '
+set -eu
+hermes="$HOME/.local/bin/hermes"
+profile="$HOME/.hermes/profiles/mojo"
+if [ ! -d "$profile" ]; then
+    "$hermes" profile create mojo
+fi
+mkdir -p "$profile/cron" "$profile/scripts" "$profile/skills/custom"
+'
+
+printf 'Remote-only custom content (dry run; actual sync will preserve it):\n'
+if ! custom_report=$(
+    rsync --archive --dry-run --delete --itemize-changes \
+        --no-owner --no-group \
+        "$PROFILE_DIR/skills/custom/" \
+        "$SSH_TARGET:$REMOTE_PROFILE/skills/custom/"
+); then
+    printf 'custom-skill dry-run failed; nothing was synced\n' >&2
+    exit 1
+fi
+remote_only=0
+while IFS= read -r report_line; do
+    if [[ "$report_line" == *"deleting "* ]]; then
+        printf '  %s\n' "$report_line"
+        remote_only=1
+    fi
+done <<< "$custom_report"
+if ((remote_only == 0)); then
+    printf '  none\n'
+fi
+
+printf 'Syncing repository-owned definition files (additive; no deletes):\n'
+# The explicit file list is the ownership boundary. The actual sync has no
+# --delete, so remote runtime data and remote-only custom skills survive.
+printf '%s\n' \
+    config.yaml \
+    SOUL.md \
+    cron/jobs.json \
+    scripts/ \
+    skills/custom/ |
+    rsync --archive --recursive --verbose --human-readable --itemize-changes \
+        --no-owner --no-group \
+        --exclude='.env' \
+        --exclude='auth.json' \
+        --exclude='__pycache__/' \
+        --exclude='*.pyc' \
+        --exclude='*.pyo' \
+        --files-from=- \
+        "$PROFILE_DIR/" \
+        "$SSH_TARGET:$REMOTE_PROFILE/"
+
+printf 'Restarting Mojo gateway...\n'
+ssh -- "$SSH_TARGET" '"$HOME/.local/bin/hermes" -p mojo gateway restart'
+printf 'Mojo deployment complete.\n'

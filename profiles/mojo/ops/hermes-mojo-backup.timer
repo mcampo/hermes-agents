@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily Hermes Mojo profile backup
+
+[Timer]
+OnCalendar=*-*-* 06:00:00 America/Argentina/Buenos_Aires
+Persistent=true
+
+[Install]
+WantedBy=timers.target

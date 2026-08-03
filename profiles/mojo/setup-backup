@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+umask 077
+
+die() {
+    printf 'setup-backup: %s\n' "$*" >&2
+    exit 1
+}
+
+repo_dir=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+backup_source="$repo_dir/ops/backup"
+service_source="$repo_dir/ops/hermes-mojo-backup.service"
+timer_source="$repo_dir/ops/hermes-mojo-backup.timer"
+
+[[ -f "$backup_source" ]] || die "missing backup script"
+[[ -f "$service_source" ]] || die "missing service unit"
+[[ -f "$timer_source" ]] || die "missing timer unit"
+
+gapi_script="$HOME/.hermes/profiles/mojo/skills/productivity/google-workspace/scripts/google_api.py"
+[[ -f "$gapi_script" ]] || die "Google Workspace wrapper not found"
+gapi_home="$HOME/.hermes"
+gapi_python="$HOME/.hermes/.venv-google/bin/python"
+[[ -x "$gapi_python" ]] || die "Google Workspace Python is not executable"
+json_python="$gapi_python"
+
+gapi() {
+    HERMES_HOME="$gapi_home" "$gapi_python" "$gapi_script" "$@"
+}
+
+json_first_id() {
+    "$json_python" -c '
+import json
+import re
+import sys
+
+try:
+    value = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(1)
+
+if isinstance(value, list):
+    files = value
+elif isinstance(value, dict) and value.get("id"):
+    files = [value]
+elif isinstance(value, dict):
+    files = value.get("files", [])
+else:
+    files = []
+for item in files:
+    if not isinstance(item, dict):
+        continue
+    file_id = item.get("id")
+    if isinstance(file_id, str) and re.fullmatch(r"[A-Za-z0-9_-]+", file_id):
+        print(file_id)
+        raise SystemExit(0)
+raise SystemExit(1)
+'
+}
+
+alert_recipient=${BACKUP_ALERT_TO:-}
+if [[ -z "$alert_recipient" ]]; then
+    IFS= read -r -p 'Failure-alert recipient: ' alert_recipient || true
+fi
+[[ "$alert_recipient" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || \
+    die "failure-alert recipient must be an email address"
+
+root_query="name = 'Hermes Backups' and mimeType = 'application/vnd.google-apps.folder' and trashed = false and 'root' in parents"
+root_json=$(gapi drive search "$root_query" --raw-query --max 100)
+root_id=$(printf '%s' "$root_json" | json_first_id || true)
+if [[ -z "$root_id" ]]; then
+    root_json=$(gapi drive create-folder 'Hermes Backups')
+    root_id=$(printf '%s' "$root_json" | json_first_id || true)
+fi
+[[ "$root_id" =~ ^[A-Za-z0-9_-]+$ ]] || die "could not create or locate Hermes Backups folder"
+
+mojo_query="name = 'mojo' and mimeType = 'application/vnd.google-apps.folder' and trashed = false and '$root_id' in parents"
+mojo_json=$(gapi drive search "$mojo_query" --raw-query --max 100)
+folder_id=$(printf '%s' "$mojo_json" | json_first_id || true)
+if [[ -z "$folder_id" ]]; then
+    mojo_json=$(gapi drive create-folder mojo --parent "$root_id")
+    folder_id=$(printf '%s' "$mojo_json" | json_first_id || true)
+fi
+[[ "$folder_id" =~ ^[A-Za-z0-9_-]+$ ]] || die "could not create or locate Hermes Backups/mojo folder"
+
+config_dir="$HOME/.config/hermes"
+config_file="$config_dir/mojo-backup.env"
+mkdir -p "$config_dir"
+tmp_config=$(mktemp "$config_dir/.mojo-backup.env.XXXXXX")
+trap 'rm -f -- "$tmp_config"' EXIT
+{
+    printf '# Hermes Mojo backup settings; keep this file outside Git.\n'
+    printf 'DRIVE_FOLDER_ID=%s\n' "$folder_id"
+    printf 'BACKUP_ALERT_TO=%s\n' "$alert_recipient"
+} >"$tmp_config"
+chmod 0600 "$tmp_config"
+mv -f -- "$tmp_config" "$config_file"
+trap - EXIT
+
+install_dir="$HOME/.local/bin"
+unit_dir="$HOME/.config/systemd/user"
+mkdir -p "$install_dir" "$unit_dir"
+install -m 0755 "$backup_source" "$install_dir/hermes-mojo-backup"
+install -m 0644 "$service_source" "$unit_dir/hermes-mojo-backup.service"
+install -m 0644 "$timer_source" "$unit_dir/hermes-mojo-backup.timer"
+
+report_linger() {
+    local user_name=${USER:-$(id -un)}
+    if command -v loginctl >/dev/null 2>&1; then
+        local linger
+        linger=$(loginctl show-user "$user_name" -p Linger --value 2>/dev/null || true)
+        if [[ "$linger" == yes ]]; then
+            return 0
+        fi
+    fi
+    printf 'setup-backup: user linger is not confirmed; to run while logged out, ask an administrator to run: sudo loginctl enable-linger %s\n' "$user_name" >&2
+}
+
+if ! systemctl --user daemon-reload; then
+    printf 'setup-backup: files installed, but the user systemd manager is unavailable.\n' >&2
+    report_linger
+    exit 1
+fi
+
+if ! systemctl --user enable --now hermes-mojo-backup.timer; then
+    printf 'setup-backup: timer installed, but could not be enabled or started.\n' >&2
+    report_linger
+    exit 1
+fi
+
+report_linger
+printf 'Mojo backup is configured as a user timer.\n'
