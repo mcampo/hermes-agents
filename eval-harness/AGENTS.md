@@ -35,7 +35,7 @@ This project follows a **spec-driven development workflow**. Before making code 
 ## Key Architecture Details
 
 - **Entry point**: `run.sh` → `src/harness.py`
-- **Python runtime on RPi**: `~/.hermes/.venv-google/bin/python` (venv with `gspread` and `google-auth`)
+- **Python runtime on RPi**: `~/.hermes/.venv/bin/python` (venv with `gspread` and `google-auth`)
 - **Config**: `config.json` at the project root defines models, runs, eval profile, and optional Google Sheets config
 - **Results**: Written to `eval_results.csv` locally and optionally appended to Google Sheets
 

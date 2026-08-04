@@ -63,7 +63,7 @@
 
 - [ ] T006 Deploy task to RPi via rsync and verify discovery: `./run.sh --list-tasks` shows `ipc-indec-angelica`.
 - [ ] T007 Populate `fixtures/expected.json` with the correct IPC value for the current period.
-- [ ] T008 Run reset manually on RPi: `~/.hermes/.venv-google/bin/python -c "import sys; sys.path.insert(0, '.'); from reset import reset; reset()"` from the task directory. Verify the target cell in Google Sheets reads `0.00%`.
+- [ ] T008 Run reset manually on RPi: `~/.hermes/.venv/bin/python -c "import sys; sys.path.insert(0, '.'); from reset import reset; reset()"` from the task directory. Verify the target cell in Google Sheets reads `0.00%`.
 - [ ] T009 Run a single evaluation: `./run.sh --tasks ipc-indec-angelica --runs 1`. Verify:
   - Agent executes the skill workflow (downloads PDF, writes to Sheets).
   - Validator produces a score between 0.0 and 1.0 with meaningful detail strings.

@@ -33,7 +33,7 @@ This task exercises web navigation, PDF parsing, Google Sheets interaction, date
 | Target Row           | Row 15 (`"Variación mensual IPC"` in Column A)     |
 | Target Column        | Current execution month (Spanish name in Row 1)    |
 | Spreadsheet Locale   | `es_AR` (semicolon `;` as formula arg separator)   |
-| Python venv          | `/home/mcampo/.hermes/.venv-google/bin/python`     |
+| Python venv          | `/home/mcampo/.hermes/.venv/bin/python`            |
 
 ---
 

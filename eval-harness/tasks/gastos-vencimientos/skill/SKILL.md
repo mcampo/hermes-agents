@@ -33,7 +33,7 @@ search Gmail, download sources, choose attachment roles, call `prepare_item`,
 call `commit_item`, redirect ledgers, or call `render_report` yourself:
 
 ```bash
-/home/mcampo/.hermes/.venv-google/bin/python /home/mcampo/.hermes/profiles/eval/skills/gastos-vencimientos/scripts/process_batch.py
+/home/mcampo/.hermes/.venv/bin/python /home/mcampo/.hermes/profiles/eval/skills/gastos-vencimientos/scripts/process_batch.py
 ```
 
 It searches the fixed unread query, acquires and dispatches current sources,
@@ -273,7 +273,7 @@ Hermes Eval - Vencimientos/
 ## Shell Aliases
 
 ```bash
-GAPI_PY=/home/mcampo/.hermes/.venv-google/bin/python
+GAPI_PY=/home/mcampo/.hermes/.venv/bin/python
 GAPI="$GAPI_PY /home/mcampo/.hermes/profiles/eval/skills/productivity/google-workspace/scripts/google_api.py"
 GSETUP="$GAPI_PY /home/mcampo/.hermes/profiles/eval/skills/productivity/google-workspace/scripts/setup.py"
 ```
@@ -291,9 +291,9 @@ GSETUP="$GAPI_PY /home/mcampo/.hermes/profiles/eval/skills/productivity/google-w
 
 Verify `pymupdf` is installed:
 ```bash
-~/.hermes/.venv-google/bin/python -c "import fitz"
+~/.hermes/.venv/bin/python -c "import fitz"
 ```
-If missing: `uv pip install --python ~/.hermes/.venv-google/bin/python pymupdf`.
+If missing: `uv pip install --python ~/.hermes/.venv/bin/python pymupdf`.
 
 ## Cron
 

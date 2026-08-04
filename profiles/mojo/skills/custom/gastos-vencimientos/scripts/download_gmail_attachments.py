@@ -20,7 +20,7 @@ Dependency:
 Uses the same OAuth token:
     - Token:       ~/.hermes/google_token.json
     - Client sec:  ~/.hermes/google_client_secret.json
-    - Venv python: $HOME/.hermes/.venv-google/bin/python
+    - Venv python: $HOME/.hermes/.venv/bin/python
 """
 
 import argparse

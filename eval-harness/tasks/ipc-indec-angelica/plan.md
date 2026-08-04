@@ -14,13 +14,13 @@ Both `reset.py` and `validator.py` need direct Google Sheets API access (via `gs
 
 **Language/Version**: Python 3.11+
 
-**Dependencies**: `gspread`, `google-auth` (available in `~/.hermes/.venv-google/`)
+**Dependencies**: `gspread`, `google-auth` (available in `~/.hermes/.venv/`)
 
 **Authentication**: Pre-authorized OAuth2 token file at `~/.hermes/google_token.json` (same token used by the harness's Google Sheets persistence)
 
 **Target Platform**: Linux (Raspberry Pi), aarch64
 
-**Constraints**: Scripts run under `~/.hermes/.venv-google/bin/python` which has `gspread` and `google-auth` pre-installed.
+**Constraints**: Scripts run under `~/.hermes/.venv/bin/python` which has `gspread` and `google-auth` pre-installed.
 
 ---
 

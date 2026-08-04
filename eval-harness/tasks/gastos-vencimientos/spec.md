@@ -94,7 +94,7 @@ task fixtures so that the baseline model comparison stays deterministic.
 | Drive root | `Hermes Eval - Vencimientos` (`1zpLE3gXabspesoSPjkO-gGJDZZmF1zXk`) |
 | Sheet month coverage | Junio–Diciembre |
 | Sheet locale | Argentine: `.` thousands separator and `,` decimal separator |
-| Python venv | `/home/mcampo/.hermes/.venv-google/bin/python` |
+| Python venv | `/home/mcampo/.hermes/.venv/bin/python` |
 
 Service rows and month blocks must be resolved through the installed skill's
 `scripts/cell_range.py`; task code must not duplicate those mappings.
@@ -549,7 +549,7 @@ row, formula, filename, archive, and commit semantics.
 ## Post-v4 Execution Traceability and Report Classification
 
 The normal command in `skill/SKILL.md` must invoke
-`/home/mcampo/.hermes/.venv-google/bin/python` directly. It must not rely on
+`/home/mcampo/.hermes/.venv/bin/python` directly. It must not rely on
 an unexported shell alias or fall back to the system `python3` interpreter.
 
 The harness provides `GASTOS_VENCIMIENTOS_LEDGER_DIR` for every benchmark run.

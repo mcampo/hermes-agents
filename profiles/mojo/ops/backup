@@ -27,7 +27,7 @@ hermes_bin="$HOME/.local/bin/hermes"
 gapi_script="$HOME/.hermes/profiles/mojo/skills/productivity/google-workspace/scripts/google_api.py"
 [[ -f "$gapi_script" ]] || die "Google Workspace wrapper not found"
 gapi_home="$HOME/.hermes"
-gapi_python="$HOME/.hermes/.venv-google/bin/python"
+gapi_python="$HOME/.hermes/.venv/bin/python"
 [[ -x "$gapi_python" ]] || die "Google Workspace Python is not executable"
 json_python="$gapi_python"
 

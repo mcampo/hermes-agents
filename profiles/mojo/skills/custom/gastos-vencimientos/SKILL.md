@@ -234,7 +234,7 @@ Vencimientos/
 ## Shell Aliases
 
 ```bash
-GAPI_PY=$HOME/.hermes/.venv-google/bin/python
+GAPI_PY=$HOME/.hermes/.venv/bin/python
 GAPI="$GAPI_PY $HOME/.hermes/profiles/mojo/skills/productivity/google-workspace/scripts/google_api.py"
 GSETUP="$GAPI_PY $HOME/.hermes/profiles/mojo/skills/productivity/google-workspace/scripts/setup.py"
 ```
@@ -252,9 +252,9 @@ GSETUP="$GAPI_PY $HOME/.hermes/profiles/mojo/skills/productivity/google-workspac
 
 Verify `pymupdf` is installed:
 ```bash
-~/.hermes/.venv-google/bin/python -c "import fitz"
+~/.hermes/.venv/bin/python -c "import fitz"
 ```
-If missing: `uv pip install --python ~/.hermes/.venv-google/bin/python pymupdf`.
+If missing: `uv pip install --python ~/.hermes/.venv/bin/python pymupdf`.
 
 ## Cron
 

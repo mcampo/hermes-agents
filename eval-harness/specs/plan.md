@@ -22,7 +22,7 @@ Build a modular, task-agnostic evaluation harness framework that dynamically dis
 
 **Project Type**: CLI application (Python script)
 
-**Constraints**: Must run under `~/.hermes/.venv-google/bin/python` for Google API access; Hermes CLI must be on `$PATH`
+**Constraints**: Must run under `~/.hermes/.venv/bin/python` for Google API access; Hermes CLI must be on `$PATH`
 
 ---
 

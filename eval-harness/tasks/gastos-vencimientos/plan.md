@@ -31,7 +31,7 @@ evaluation skill is installed only in the Hermes `eval` profile.
 
 **Language/Version**: Python 3.11+
 
-**Runtime**: `/home/mcampo/.hermes/.venv-google/bin/python`
+**Runtime**: `/home/mcampo/.hermes/.venv/bin/python`
 
 **Primary dependencies**:
 

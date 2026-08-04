@@ -3,7 +3,7 @@
 save_gmail_eml.py — download a Gmail message as .eml (RFC822).
 
 Usage:
-    ~/.hermes/.venv-google/bin/python \
+    ~/.hermes/.venv/bin/python \
         scripts/save_gmail_eml.py \
         --message-id 19ef51fd8ee82795 \
         --output /tmp/aysa.eml

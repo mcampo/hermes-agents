@@ -19,7 +19,7 @@
 **Purpose**: Create the new project structure and bootstrap scripts
 
 - [ ] T001 Create directory structure: `eval-harness/src/`, `eval-harness/tasks/`, `eval-harness/results/`, `eval-harness/results/sessions/`
-- [ ] T002 [P] Create `eval-harness/run.sh` wrapper script that invokes `~/.hermes/.venv-google/bin/python src/harness.py "$@"` relative to its directory
+- [ ] T002 [P] Create `eval-harness/run.sh` wrapper script that invokes `~/.hermes/.venv/bin/python src/harness.py "$@"` relative to its directory
 - [ ] T003 [P] Create `eval-harness/README.md` with quick-start instructions referencing the `run.sh` wrapper
 
 **Checkpoint**: Directory structure exists, `run.sh` is executable
