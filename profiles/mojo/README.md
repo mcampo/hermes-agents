@@ -1,7 +1,7 @@
 # Mojo Profile
 
 Canonical repository definition for the single live `mojo` Hermes profile.
-The last-tested Hermes version was `v0.19.0 (2026.7.20)`; Hermes is not
+The last-tested Hermes version was `v0.20.0 (2026.8.3)`; Hermes is not
 pinned by this profile.
 
 ## Source Layout
