@@ -483,7 +483,7 @@ curator:
   backup:
     enabled: true
     keep: 5
-timezone: ''
+timezone: America/Argentina/Buenos_Aires
 slack:
   require_mention: true
   free_response_channels: ''
@@ -637,7 +637,9 @@ computer_use:
   cua_telemetry: false
 _config_version: 33
 session_reset:
-  mode: none
+  mode: both
+  idle_minutes: 300
+  at_hour: 6
 image_gen:
   provider: openrouter
   use_gateway: false
