@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import html as html_module
 import json
+import os
 import re
 import sys
 from datetime import date
@@ -380,7 +381,7 @@ def main() -> int:
         pages = _open_pdf_pages(args.pdf)
         result = extract_mastercard_text(pages[0], "\n".join(pages))
     elif args.type == "mercado-pago":
-        result = extract_mercado_pago_text(_open_pdf_text(args.pdf, password="31507"), args.year)
+        result = extract_mercado_pago_text(_open_pdf_text(args.pdf, password=os.environ["MERCADO_PAGO_PDF_PASSWORD"]), args.year)
     elif args.type == "expensas":
         result = extract_expensas_text(_open_pdf_text(args.pdf), args.subject)
     else:

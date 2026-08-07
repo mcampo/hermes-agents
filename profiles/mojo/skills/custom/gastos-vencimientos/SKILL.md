@@ -1,10 +1,8 @@
 ---
 name: gastos-vencimientos
 description: "Process credit card statements and utility bills forwarded to `${GASTOS_VENCIMIENTOS_EMAIL}` — extract amounts/due dates, load into 'Gastos bonitos' → 'Aux - Previsión' sheet, and archive PDFs/receipts to Drive/Vencimientos/<year>/<month>/."
-version: 2.0.0
-author: agent
-platforms: [linux]
 metadata:
+  version: "2.3.0"
   hermes:
     tags: [expenses, due-dates, credit-cards, google-sheets, google-drive, gmail, argentina, afip]
     related_skills: [google-workspace]
@@ -28,6 +26,37 @@ Archive PDFs/receipts to **Drive → Vencimientos / `<year>` / `<month>` /**.
 
 > **Canonical service→row and month→column tables:** [`references/quick-lookup.md`](references/quick-lookup.md). Load before writing to the sheet.
 
+## Mandatory Deterministic Path
+
+For normal runs, invoke exactly one deterministic command. Do not manually
+search Gmail, download sources, choose attachment roles, call `prepare_item`,
+call `commit_item`, redirect ledgers, or call `render_report` yourself:
+
+```bash
+$HOME/.hermes/.venv/bin/python $HOME/.hermes/profiles/mojo/skills/custom/gastos-vencimientos/scripts/process_batch.py
+```
+
+It searches the fixed unread query, acquires and dispatches current sources,
+prepares each message, commits it once, atomically saves every ledger, cleans
+temporary sources, and prints the ledger-derived final report. Use its stdout
+verbatim. For a targeted recovery, pass one or more `--message-id` values;
+never rerun a message merely to recreate a ledger.
+
+Ledgers go to the directory named by `GASTOS_VENCIMIENTOS_LEDGER_DIR` when set;
+a direct command outside a scheduled run creates its own temporary ledger
+directory, never a shared path.
+
+> **HIGH-VALUE RULE — current inputs are the only authority.** Never inspect
+> prior runs, previous-month rows/files, old reports, or model transcripts to
+> infer a value. They are not evidence for the current bill and can contain
+> exactly the errors this workflow is meant to prevent. If a current source is
+> ambiguous, fail that message and leave it unread.
+
+> **The installed skill is immutable during a run.** Treat this directory and
+> its scripts as read-only. If a helper rejects a source or fails, record a
+> failed ledger and leave that message unread; never patch, replace, or rewrite
+> the helper in place. Operator fixes must be deployed before the next run.
+
 ## Loading Rules
 
 1. **Never overwrite cells.** Read target range before writing. If the cell already has a value:
@@ -36,10 +65,12 @@ Archive PDFs/receipts to **Drive → Vencimientos / `<year>` / `<month>` /**.
 
    ⚠️ **Verification nuance:** `$GAPI sheets get` returns **FORMATTED_VALUE** by default — not formulas. When you wrote a formula like `=5306400,91-2946385,63` on a previous run, reading it back yields the **computed number** (e.g. `2.360.015,28`), not the formula text. When checking whether a cell "matches", compare against the **expected formatted result**, not the raw formula string. For non-formula cells, `sheets get` may return formatted strings (thousands separators, locale-dependent decimals) — normalize both sides before comparing: strip thousand separators and unify the decimal separator.
 2. **Due day** → integer (1–31).
-3. **M/A column** → `"M"` (manual), `"A"` (auto), or blank if unknown.
+3. **M/A column** → `"M"` (manual), `"A"` (auto), or blank only where the
+   type rule permits it. **Visa = `M`; Mastercard = `M`; Expensas = blank.**
+   Mercado Pago and PagoMisCuentas use explicit current-source auto-debit text.
 4. **ARS amount** (column +2):
    - Negative total → **`0`** (credit balance, literal).
-   - Cards **with AFIP tax > 0** → **formula** with comma decimal: `=TOTAL,XX-TAX,XX` (e.g. `=5306400,91-2946385,63`). Lets the configured account holder audit.
+   - Cards **with AFIP tax > 0** → **formula** with comma decimal: `=TOTAL,XX-TAX,XX` (e.g. `=5306400,91-2946385,63`). Lets Mariano audit.
    - Cards **without tax** (tax=0/None) + all utilities → **literal** value.
 5. **USD amount** (column +3):
    - Negative → **`0`**.
@@ -54,14 +85,14 @@ Identify each email by subject + sender, then follow its extraction rules.
 | # | Type | Identify By | Source | Key Extraction | File Name |
 |---|------|------------|--------|---------------|-----------|
 | 1 | **Mastercard** | Subject: "Resumen de Tarjeta MasterCard"; From: contains "Galicia" | PDF attachment | Due: 4th of 6 dates on page 1 (index 3). Total: `TOTAL A PAGAR`. Tax: `PERCEP.AFIP RG 4815/5617 30%`. | `Mastercard - Resumen YYYY-MM (vence DD-MM-YY).pdf` |
-| 2 | **Visa** | Subject: "Resumen de Cuenta VISA"; From: contains "Galicia" or "E-Resumen" | PDF via link in body | URL: `https://www.eresumen.com.ar/msc/descargar/m/<UUID>:0` (keep `:0`). Due: `VENCIMIENTO DD Mes YY`. Total: `SALDO ACTUAL`. Tax: `DB.RG 5617` on totals page. | `Visa - Resumen YYYY-MM (vence DD-MM-YY).pdf` |
+| 2 | **Visa** | Subject: "Resumen de Cuenta VISA"; From: contains "Galicia" or "E-Resumen" | PDF via link in body | URL: `https://www.eresumen.com.ar/msc/descargar/m/<UUID>:0` (keep `:0`). Due: the single date in the helper's bounded window after `VENCIMIENTO` (same-line and tabular layouts supported). Total: `SALDO ACTUAL`. Tax: `DB.RG 5617` on totals page. | `Visa - Resumen YYYY-MM (vence DD-MM-YY).pdf` |
 | 3 | **Mercado Pago** | Subject: "Debitaremos el total de tu tarjeta..."; From: `no-responder@mercadopago.com` | PDF attachment (encrypted) | Password: `${MERCADO_PAGO_PDF_PASSWORD}`. Due: `Fecha de vencimiento`. Total: space-separated decimal (e.g. `106.663 00`). Auto-debit check: "Tenés activo el débito automático" → `"A"`. No AFIP tax. | `Mercado Pago - Resumen YYYY-MM (vence DD-MM-YY).pdf` |
-| 4 | **Expensas** | From: `no-reply@octopus.com.ar`; Subject: contains "Expensas Período" | 2 PDF attachments | Save both (liquidación + recibo). Due: `1° VTO: DD/MM/YYYY`. Amount: `TOTAL AL 1er VTO.: $XXX,XX`. ⚠️ Column month = due date month, not period month. Owner `${GASTOS_VENCIMIENTOS_EXPENSAS_OWNER}` = expected. | Liquidación: `Expensas - Liquidacion YYYY-MM (vence DD-MM-YY).pdf`<br>Recibo: `Expensas - Recibo YYYY-MM.pdf` |
+| 4 | **Expensas** | From: `no-reply@octopus.com.ar`; Subject: contains "Expensas Período" | 1–2 PDF attachments | Save the liquidación; save the recibo when attached. Due: `1° VTO: DD/MM/YYYY`. Amount: `TOTAL AL 1er VTO.: $XXX,XX`. Sheet column and Drive folder use the due month; **both filenames use the subject statement period**. Owner `${GASTOS_VENCIMIENTOS_EXPENSAS_OWNER}` = expected. | Liquidación: `Expensas - Liquidacion <STATEMENT-YYYY-MM> (vence DD-MM-YY).pdf`<br>Recibo: `Expensas - Recibo <STATEMENT-YYYY-MM>.pdf` (when attached) |
 | 5 | **PagoMisCuentas digest** | From: `avisos@pagomiscuentas.com`; Subject: "Servicios por Vencer" | Email body (HTML) | Strip HTML first: `<br>`→`\n`, remove all tags, `html.unescape()`. Then regex per service block. Map company→service via table below. | `PagoMisCuentas - <Service> YYYY-MM.eml` |
 | 6 | **PagoMisCuentas confirmation** | Subject: "Confirmación de Pago Automático" (or body contains "débito automático"/"se ha realizado con éxito") | — | **DISCARD.** Mark read. No sheet load. No Drive archive. Report as "administrative close" (1 line). This is a receipt, not a new bill. | — |
 | 7 | **Other utility** | Any other matched email with PDF or body | PDF or body | Extract due date + ARS amount. Apply loading rules (literal, no formula). If ambiguous → don't mark read, include in report. | `<Service> - YYYY-MM.pdf` or `.eml` |
 
-> **Regex patterns** for PDF extraction (Mastercard, Visa, Mercado Pago): [`references/pdf-regex-cookbook.md`](references/pdf-regex-cookbook.md). Row builder helpers (`_open_pdf_text()`, `build_tarjeta_row()`, `build_servicio_row()`) are in [`scripts/row_builders.py`](scripts/row_builders.py) — import them, don't copy-paste.
+> The cookbook documents formats for maintenance only. Normal runs must call [`scripts/prepare_item.py`](scripts/prepare_item.py), which delegates extraction to [`scripts/extract_items.py`](scripts/extract_items.py) and row/range/filename policy to deterministic helpers.
 
 ## Company → Service Mapping
 
@@ -83,8 +114,19 @@ If a company can't be mapped → log, skip, don't mark read.
 Non-obvious extraction rules not covered by the cookbook:
 
 ### Visa
+- **M/A is always `M`.**
 - Download PDF with `curl -sL --max-time 30 '<URL>'`. If response is HTML/302 → token expired. ⚠️ The email body does NOT contain structured data for extraction — leave the email unread and alert the user. Do not attempt to extract from body.
-- ⚠️ `DEV.IMP. RG 5617` on page 1 is a **historical refund**, NOT current tax. Use `DB.RG` on totals page.
+- ⚠️ `DEV.IMP. RG 5617` on page 1 is a **historical refund**, NOT current tax.
+  Extract the current positive `DB.RG 5617` on the totals page. When it is
+  present, the ARS cell must be the auditable locale formula
+  `=<SALDO ACTUAL ARS>-<DB.RG 5617>`, never a literal total and never the
+  already-subtracted result. If the `DB.RG 5617` marker is present but its
+  amount is not unambiguous, fail the message; do not assume tax zero.
+
+### Mastercard
+- **M/A is always `M`.** The fourth of the six page-one dates (index 3) is
+  authoritative for the due date. A negative ARS or USD balance becomes
+  literal `0` as specified in Loading Rules.
 
 ### Mercado Pago
 - Decimal separator in header is a **space**: `106.663 00` = $106,663.00. The "Consolidado" section uses comma normally.
@@ -93,6 +135,10 @@ Non-obvious extraction rules not covered by the cookbook:
 ### Expensas
 - If no PDF (text-only email) → parse body with same patterns.
 - M/A: blank. USD: blank.
+- The `Expensas Período <Mes>-<Año>` subject supplies the statement period for
+  **both** canonical filenames. The internal period printed on the receipt may
+  describe the prior payment and must not rename the receipt. The first due
+  date controls only the Sheet month and Drive `<year>/<month>` folder.
 
 ### PagoMisCuentas Digest
 Body parsing — extract plain text from HTML, then split into service blocks:
@@ -166,39 +212,27 @@ Vencimientos/
 
 ## Procedure
 
-0. **Auth pre-check.** Verify the OAuth token is valid before touching any API:
-   ```bash
-   $GAPI_PY $HOME/.hermes/profiles/mojo/skills/productivity/google-workspace/scripts/setup.py --check
-   ```
-   If it doesn't print `AUTHENTICATED` → exit with error (don't be silent). The token may need refresh.
-1. **Search** unread emails with the Gmail query from Fixed Resources. Use `--max 100` to avoid the default 10-result limit. If the API returns 100 results and you have not checked `nextPageToken`, re-run with pagination (the Gmail API list endpoint accepts `pageToken`). Keep fetching while a `nextPageToken` is present — no email should be silently dropped because it fell outside a single page.
-2. **If no results** → silent exit (respond `[SILENT]` so the cron scheduler suppresses delivery).
-3. **For each email** — wrap in try/except. If any unhandled exception occurs: log the error, leave the email unread, and **continue to the next email**. Never let one bad email block the rest.
-   a. **Identify type** via dispatch table. Unknown → report, don't mark read, skip. PagoMisCuentas confirmation → discard (mark read, report 1 line).
-   b. **Download** PDF/attachments per type. For Visa PDF download, always use a timeout: `curl -sL --max-time 30 '<URL>'`.
-   c. **Extract data** using cookbook regex patterns. Import row builders from the script instead of copying inline code:
-      ```python
-      import sys
-      sys.path.insert(0, '$HOME/.hermes/profiles/mojo/skills/custom/gastos-vencimientos/scripts')
-      from row_builders import build_tarjeta_row, build_servicio_row, _open_pdf_text
-      ```
-   d. **Look up** service row + month column from quick-lookup.md. Map the due-date Spanish month name to a `MONTH_BLOCKS` key. If the month is not in MONTH_BLOCKS (Enero–Mayo) → skip the sheet load, notify via Telegram.
-   e. **Read target cells** before writing (see Loading Rule 1 for comparison nuance). If value matches what you'd write after normalizing formatted vs formula output → already loaded (mark read, skip rest of this email). If value differs → skip, alert user, leave unread.
-   f. **Build row** with `build_tarjeta_row()` or `build_servicio_row()`.
-   g. **Upload** PDF/EML to `Vencimientos/<year>/<month>/` **first** (before writing to the sheet). Create folders if needed. ⚠️ If upload fails → stop here, leave email unread, report error — do NOT write to the sheet.
-   h. **Write** to sheet via `sheets update` (exact range from `cell_range()` helper).
-   i. **Verify** the write by reading the same range back with `sheets get`. ⚠️ Because `sheets get` returns **formatted** values (not formulas), compare **normalized** values: strip thousand separators (`.`), unify decimal to `,`. For formula cells, compute the expected numeric result. For blank trailing cells (USD in utilities), `sheets get` may return fewer columns than written — treat missing trailing columns as matching blank. If normalized values don't match → leave email unread, report error.
-   j. **Mark read** (`gmail modify --remove-labels UNREAD`). Only if all prior steps succeeded.
-4. **Clean up** temp files. Delete all PDFs and EMLs downloaded to `/tmp` during this run.
-5. **Report** to user (see below).
+0. **Auth pre-check is built in.** `process_batch.py` performs Gmail discovery
+   before any mutation. If authentication fails, it exits with the API error
+   before acquiring sources or changing Gmail, Drive, or Sheets.
+1. **Run `process_batch.py` once.** It paginates the fixed unread Gmail query,
+   handles every supported message as one transaction, and prints `[SILENT]`
+   when none are found. A failed source, preparation, or commit creates a
+   persisted failed ledger, leaves that message unread, and continues. It
+   recognizes a PagoMisCuentas confirmation as an administrative close, not a
+   bill.
+2. **Use its report verbatim.** Do not invoke `commit_item.py` afterwards,
+   reconstruct ledgers, or compose a success claim from tool output.
 
 ## Report
 
-- **All OK, no issues** → 1–3 line summary:
-  > ✅ Processed 2: Mastercard Jun ($0 / USD 1,731.24), Visa Jun ($2,360,015 / USD 6,840.33). [PDFs in Drive](https://drive.google.com/drive/folders/<FOLDER_ID>).
-  Include a Drive link for each file.
-- **Issues** → table of unprocessed emails + reason, plus what succeeded.
+- **All OK, no issues** → summary plus one direct link per archived file:
+  > ✅ Procesados 2 correos (2 vencimientos) correctamente.
+  > - Visa: [Visa - Resumen 2026-07 (...).pdf](https://drive.google.com/file/d/<FILE_ID>/view)
+  A folder link does not substitute for per-file links.
+- **Issues** → every unprocessed email and reason, plus what succeeded and all links for successful archives.
 - **Nothing new** → respond with exactly `[SILENT]` (cron scheduler suppresses delivery).
+- Never say that all items succeeded when a ledger failed, a target conflicted, a required artifact has no link, or a source remained unread.
 
 ## Critical Pitfalls
 
@@ -207,6 +241,8 @@ Vencimientos/
 3. **Visa PDF may return HTML** if token consumed. The body has no structured data — leave unread, alert user. Do not attempt "body fallback."
 4. **Mastercard: 6 dates, index 3** is the current due date.
 5. **`DEV.IMP. RG 5617` ≠ tax.** That's a historical refund on Visa page 1. Use `DB.RG` on totals page.
+5a. **Visa and Mastercard M/A are `M`.** Do not infer `A` or blank from history.
+5b. **Expensas names use the subject statement period; folder and Sheet use due month.**
 6. **Negative balance → `0` literal**, no formula. Same for USD.
 7. **Never mark read if any step failed** (except PagoMisCuentas confirmations — those are intentional discards).
 8. **`sheets update` is destructive** — always read the cell first.
@@ -230,6 +266,7 @@ Vencimientos/
            break
    ```
    Always respect the declared MIME charset — do not assume UTF-8.
+19. **Never use prior runs or prior-month state as evidence.** This is a high-value correctness and isolation rule. Parse the current message and current attachment only; ambiguity is a failed transaction, not a guess.
 
 ## Shell Aliases
 
@@ -266,8 +303,8 @@ Requires the **OAuth token watchdog** (`preflight google oauth token`, every 6h,
 ## References
 
 - `references/quick-lookup.md` — service→row, month→column tables + `cell_range()` helper (also available as CLI: `scripts/cell_range.py`)
-- `references/pdf-regex-cookbook.md` — PDF extraction regex patterns (Visa, Mastercard, Mercado Pago)
-- `scripts/row_builders.py` — `build_tarjeta_row()`, `build_servicio_row()`, `_open_pdf_text()`, `_fmt_ar()` as an importable Python module. Always import from here — don't copy inline code from the cookbook.
+- `references/pdf-regex-cookbook.md` — supported PDF formats for helper maintenance; not the normal execution path
+- `scripts/row_builders.py` — canonical row and PDF primitives used by the deterministic pipeline.
 
 ## Scripts
 
@@ -275,3 +312,11 @@ Requires the **OAuth token watchdog** (`preflight google oauth token`, every 6h,
 - `scripts/download_gmail_attachments.py` — download all attachments from a Gmail message. Used for Mastercard, Expensas, Mercado Pago PDFs.
 - `scripts/save_gmail_eml.py` — download a Gmail message as `.eml` (RFC822 raw). Used when no PDF is available (PagoMisCuentas, other text-only utilities).
 - `scripts/row_builders.py` — `build_tarjeta_row()`, `build_servicio_row()`, `_open_pdf_text()`, `_fmt_ar()` as an importable Python module. Use this instead of copying inline code from the cookbook.
+- `scripts/extract_items.py` — deterministic, Decimal-safe extraction for every supported current source.
+- `scripts/item_planner.py` — canonical M/A, row/range, period, folder, and filename policy.
+- `scripts/prepare_item.py` — read-only one-message manifest preparation; keeps multi-service digests atomic.
+- `scripts/commit_item.py` — target pre-read plus upload→write→verify→mark-read transaction; emits a ledger.
+- `scripts/render_report.py` — derives success/issues text and individual artifact links exclusively from ledgers.
+- `scripts/process_batch.py` — normal-run orchestrator: Gmail discovery,
+  current-source acquisition, dispatch, exactly-once commit, atomic ledgers,
+  temporary-source cleanup, and ledger-derived report.

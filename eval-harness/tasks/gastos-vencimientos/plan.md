@@ -210,8 +210,8 @@ full current message, and dispatches the supported source acquisition path:
 - Visa: save current EML, extract the current `eresumen` URL, download and
   verify one PDF;
 - Mastercard and Mercado Pago: require exactly one current PDF attachment;
-- Expensas: require exactly two current PDFs and identify the liquidación from
-  its `TOTAL AL 1er VTO` source marker;
+- Expensas: require one or two current PDFs and identify the liquidación from
+  its `TOTAL AL 1er VTO` source marker; a second PDF is the receipt;
 - PagoMisCuentas digest: save current EML; and
 - payment confirmation: create an administrative-close ledger and mark only
   that message read.

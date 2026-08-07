@@ -20,7 +20,7 @@ Dependency:
 Uses the same OAuth token:
     - Token:       ~/.hermes/google_token.json
     - Client sec:  ~/.hermes/google_client_secret.json
-    - Venv python: $HOME/.hermes/.venv/bin/python
+    - Venv python: /home/mcampo/.hermes/.venv/bin/python
 """
 
 import argparse
@@ -29,13 +29,17 @@ import json
 import os
 import re
 import sys
-import tempfile
 
-# Google Workspace API wrapper lives in the mojo profile.
-sys.path.insert(0, os.path.expanduser(
-    '~/.hermes/profiles/mojo/skills/productivity/google-workspace/scripts'
-))
-from google_api import build_service  # type: ignore
+GOOGLE_SCRIPTS = os.path.expanduser(
+    "~/.hermes/profiles/mojo/skills/productivity/google-workspace/scripts"
+)
+
+def build_gmail_service():
+    """Build Gmail only for the standalone CLI entry point."""
+    sys.path.insert(0, GOOGLE_SCRIPTS)
+    from google_api import build_service  # type: ignore
+
+    return build_service("gmail", "v1")
 
 
 def _sanitize_filename(filename: str) -> str:
@@ -88,8 +92,8 @@ def _sanitize_filename(filename: str) -> str:
 def _resolve_unique_path(output_dir: str, filename: str) -> str:
     """Return an output path that does not collide with existing files.
 
-    If ``filename`` already exists in ``output_dir``, appends a numeric suffix
-    before the extension to avoid collisions.
+    If ``filename`` already exists in ``output_dir``, appends a short
+    content-derived suffix before the extension to avoid collisions.
     """
     candidate = os.path.join(output_dir, filename)
     if not os.path.exists(candidate):
@@ -102,7 +106,7 @@ def _resolve_unique_path(output_dir: str, filename: str) -> str:
     return candidate
 
 
-def walk_attachments(service, user_id, message_id, part, output_dir, saved):
+def walk_attachments(service, user_id, message_id, part, out):
     """Recursively find every part with an attachmentId and download it."""
     body = part.get("body") or {}
     if body.get("attachmentId"):
@@ -116,46 +120,72 @@ def walk_attachments(service, user_id, message_id, part, output_dir, saved):
             .execute()
         )
         data = base64.urlsafe_b64decode(att["data"])
-        safe_name = _sanitize_filename(filename)
-        out_path = _resolve_unique_path(output_dir, safe_name)
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-        with os.fdopen(os.open(out_path, flags, 0o600), "wb") as f:
-            f.write(data)
-        saved.append(
+        out.append(
             {
                 "filename": filename,
-                "safe_filename": safe_name,
-                "path": out_path,
+                "data": data,
                 "size": len(data),
                 "mimeType": part.get("mimeType", "application/octet-stream"),
             }
         )
     for sub in part.get("parts") or []:
-        walk_attachments(service, user_id, message_id, sub, output_dir, saved)
+        walk_attachments(service, user_id, message_id, sub, out)
+
+
+def download_attachments(
+    service,
+    message_id: str,
+    output_dir: str,
+    *,
+    user_id: str = "me",
+    message: dict | None = None,
+) -> list[dict]:
+    """Save current-message attachments using an already-authenticated Gmail service."""
+    os.makedirs(output_dir, exist_ok=True)
+    current = message or (
+        service.users()
+        .messages()
+        .get(userId=user_id, id=message_id, format="full")
+        .execute()
+    )
+    collected: list[dict] = []
+    walk_attachments(
+        service,
+        user_id,
+        message_id,
+        current.get("payload") or {},
+        collected,
+    )
+
+    saved: list[dict] = []
+    for attachment in collected:
+        safe_name = _sanitize_filename(attachment["filename"])
+        out_path = _resolve_unique_path(output_dir, safe_name)
+        with open(out_path, "wb") as handle:
+            handle.write(attachment["data"])
+        saved.append({
+            "filename": attachment["filename"],
+            "safe_filename": safe_name,
+            "path": out_path,
+            "size": attachment["size"],
+            "mimeType": attachment["mimeType"],
+        })
+    return saved
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--message-id", required=True, help="Gmail message ID")
-    parser.add_argument("--output-dir", default=None, help="Where to write attachment files (default: a private temporary directory)")
+    parser.add_argument("--output-dir", default="/tmp", help="Where to write attachment files (default: /tmp)")
     parser.add_argument("--user", default="me", help="Gmail userId (default: me)")
     args = parser.parse_args()
 
-    if args.output_dir is None:
-        args.output_dir = tempfile.mkdtemp(prefix="gastos-vencimientos-")
-    else:
-        os.makedirs(args.output_dir, exist_ok=True)
-    service = build_service("gmail", "v1")
-    msg = (
-        service.users()
-        .messages()
-        .get(userId=args.user, id=args.message_id, format="full")
-        .execute()
+    saved = download_attachments(
+        build_gmail_service(),
+        args.message_id,
+        args.output_dir,
+        user_id=args.user,
     )
-
-    saved = []
-    walk_attachments(service, args.user, args.message_id, msg.get("payload") or {}, args.output_dir, saved)
-
     print(json.dumps(saved, indent=2, ensure_ascii=False))
 
 

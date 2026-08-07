@@ -531,11 +531,11 @@ rendering in chat or shell. The runner must:
    report it separately from bill processing.
 
 Attachment-role selection must fail closed. In particular, Expensas requires
-exactly two PDFs and exactly one liquidación identified by its current-source
-`TOTAL AL 1er VTO` marker; the other PDF is the receipt. Visa download must
-validate that the resolved URL produces a PDF, not an HTML token-expiry page.
-The batch runner is orchestration only: it must preserve the existing planner,
-row, formula, filename, archive, and commit semantics.
+one or two PDFs and exactly one liquidación identified by its current-source
+`TOTAL AL 1er VTO` marker; when a second PDF is present it is the receipt.
+Visa download must validate that the resolved URL produces a PDF, not an HTML
+token-expiry page. The batch runner is orchestration only: it must preserve
+the existing planner, row, formula, filename, archive, and commit semantics.
 
 ---
 

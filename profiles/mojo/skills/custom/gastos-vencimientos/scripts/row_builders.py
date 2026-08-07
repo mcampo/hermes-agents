@@ -7,6 +7,7 @@ Exports:
     build_tarjeta_row()    — build a 2D row for credit cards (with formula if AFIP tax > 0)
     build_servicio_row()   — build a 2D row for utilities (literal amount, no formula)
     _open_pdf_text()       — robust PDF text extraction (PyMuPDF 1.23–1.27+)
+    _open_pdf_pages()      — robust per-page PDF text extraction
 
 Usage:
     import sys
@@ -20,7 +21,10 @@ Having them as a single importable module avoids copy-paste errors in cron runs.
 import math
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 
-import fitz
+try:
+    import fitz
+except ModuleNotFoundError:  # Pure planning and tests do not need PDF support.
+    fitz = None
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +62,51 @@ def _fmt_ar(n) -> str:
     d = _to_decimal(n)
     if d is None:
         return ""
-    return f"{d:f}".replace(".", ",")
+    # Decimal quantize ensures exactly 2 decimal places.
+    d = d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    # Use string formatting and replace the dot with comma.
+    s = f"{d:f}"
+    # f-string for Decimal gives e.g. "1234567.89"
+    return s.replace(".", ",")
+
+
+def _is_negative(d: Decimal | None) -> bool:
+    """True when d is not None AND strictly < 0."""
+    return d is not None and d < 0
+
+
+# ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+
+def _validate_dia(dia) -> int:
+    """Return an integer 1–31, raising ValueError otherwise."""
+    if not isinstance(dia, int) or dia < 1 or dia > 31:
+        raise ValueError(f"Due day must be int 1–31, got {dia!r}")
+    return dia
+
+
+def _validate_ma(manual_auto) -> str:
+    """Accept 'M', 'A', or empty string. Raise ValueError otherwise."""
+    if manual_auto is None:
+        manual_auto = ""
+    if not isinstance(manual_auto, str) or manual_auto not in ("", "M", "A"):
+        raise ValueError(f"M/A must be 'M', 'A', or '', got {manual_auto!r}")
+    return manual_auto
+
+
+def _validate_tax_perc(percepcion, total_pesos: Decimal):
+    """Check that tax is not negative and does not exceed total (unless total ≤ 0)."""
+    perc = _to_decimal(percepcion)
+    if perc is None or perc == 0:
+        return Decimal("0")
+    if perc < 0:
+        raise ValueError(f"AFIP tax cannot be negative: {perc}")
+    if total_pesos > 0 and perc > total_pesos:
+        raise ValueError(
+            f"AFIP tax ({perc}) exceeds total pesos ({total_pesos})"
+        )
+    return perc
 
 
 # ---------------------------------------------------------------------------
@@ -79,25 +127,18 @@ def build_tarjeta_row(
     - No tax (0 or None) → literal value.
     - Negative USD → 0 literal.
     """
-    if not isinstance(dia, int) or not 1 <= dia <= 31:
-        raise ValueError(f"Due day must be int 1–31, got {dia!r}")
-    manual_auto = "" if manual_auto is None else manual_auto
-    if not isinstance(manual_auto, str) or manual_auto not in ("", "M", "A"):
-        raise ValueError(f"M/A must be 'M', 'A', or '', got {manual_auto!r}")
+    dia = _validate_dia(dia)
+    manual_auto = _validate_ma(manual_auto)
     tp = _to_decimal(total_pesos)
     tu = _to_decimal(total_usd)  # None if missing
 
     if tp is None:
         raise ValueError("total_pesos is required and must be numeric")
 
-    perc = _to_decimal(percepcion) or Decimal("0")
-    if perc < 0:
-        raise ValueError(f"AFIP tax cannot be negative: {perc}")
-    if tp > 0 and perc > tp:
-        raise ValueError(f"AFIP tax ({perc}) exceeds total pesos ({tp})")
+    perc = _validate_tax_perc(percepcion, tp)
 
     # ── ARS amount ──
-    if tp < 0:
+    if _is_negative(tp):
         monto = 0
     elif perc > 0:
         monto = f"={_fmt_ar(tp)}-{_fmt_ar(perc)}"
@@ -107,7 +148,7 @@ def build_tarjeta_row(
     # ── USD amount ──
     if tu is None:
         monto_usd = ""
-    elif tu < 0:
+    elif _is_negative(tu):
         monto_usd = 0
     else:
         monto_usd = _fmt_ar(tu)
@@ -115,18 +156,7 @@ def build_tarjeta_row(
     return [[dia, manual_auto, monto, monto_usd]]
 
 
-def build_servicio_row(
-    dia: int,
-    manual_auto: str,
-    total_pesos,           # float | int | Decimal
-    total_usd=None,        # float | int | Decimal | None
-) -> list:
-    """Build a 2D row for utilities: literal amount, no formula.
-
-    - Negative total_pesos → 0 literal.
-    - Missing USD → blank (empty string).
-    - Negative USD → 0 literal.
-    """
+def build_servicio_row(dia: int, manual_auto: str, total_pesos, total_usd=None) -> list:
     return build_tarjeta_row(dia, manual_auto, total_pesos, None, total_usd)
 
 
@@ -134,11 +164,10 @@ def build_servicio_row(
 # PDF text extraction
 # ---------------------------------------------------------------------------
 
-def _open_pdf_text(path: str, password: str = None) -> str:
-    """Open a PDF (encrypted or not) and return its full text.
-
-    Compatible with PyMuPDF 1.23–1.27+.
-    """
+def _open_pdf_pages(path: str, password: str = None) -> list[str]:
+    """Open a PDF and return one text string per page."""
+    if fitz is None:
+        raise RuntimeError("PyMuPDF is required to extract PDF text")
     doc = fitz.open(path)
     try:
         if doc.is_encrypted:
@@ -147,14 +176,18 @@ def _open_pdf_text(path: str, password: str = None) -> str:
             rc = doc.authenticate(password)
             if not rc:
                 raise ValueError(f"Invalid password for {path}")
-        # PyMuPDF ≤1.23: Document.get_text() exists
-        if doc.page_count > 0 and not hasattr(doc[0], "get_textpage"):
-            # PyMuPDF ≤1.23: Document.get_text() exists
-            return doc.get_text()
-        # PyMuPDF ≥1.27: iterate pages, extract TextPage
         parts = []
         for page in doc:
-            parts.append(page.get_textpage().extractText())
-        return "\n".join(parts)
+            if hasattr(page, "get_textpage"):
+                parts.append(page.get_textpage().extractText())
+            elif hasattr(page, "get_text"):
+                parts.append(page.get_text())
+            else:
+                raise RuntimeError("unsupported PyMuPDF page text API")
+        return parts
     finally:
         doc.close()
+
+
+def _open_pdf_text(path: str, password: str = None) -> str:
+    return "\n".join(_open_pdf_pages(path, password))

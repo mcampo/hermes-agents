@@ -35,22 +35,26 @@ import json
 import os
 import sys
 
-# Google Workspace API wrapper lives in the mojo profile.
-sys.path.insert(0, os.path.expanduser(
-    '~/.hermes/profiles/mojo/skills/productivity/google-workspace/scripts'
-))
-from google_api import build_service  # noqa: E402
+GOOGLE_SCRIPTS = os.path.expanduser(
+    "~/.hermes/profiles/mojo/skills/productivity/google-workspace/scripts"
+)
+
+def build_gmail_service():
+    """Build Gmail only for the standalone CLI entry point."""
+    sys.path.insert(0, GOOGLE_SCRIPTS)
+    from google_api import build_service  # type: ignore
+
+    return build_service("gmail", "v1")
 
 
-def save_eml(message_id: str, output_path: str) -> dict:
-    svc = build_service('gmail', 'v1')
-    msg = svc.users().messages().get(userId='me', id=message_id, format='raw').execute()
+def save_eml_from_service(service, message_id: str, output_path: str, *, user_id: str = "me") -> dict:
+    """Save one current Gmail message as raw RFC822 bytes."""
+    msg = service.users().messages().get(userId=user_id, id=message_id, format="raw").execute()
     raw_bytes = base64.urlsafe_b64decode(msg['raw'])
     output_dir = os.path.dirname(output_path)
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0)
-    with os.fdopen(os.open(output_path, flags, 0o600), 'wb') as f:
+    with open(output_path, 'wb') as f:
         f.write(raw_bytes)
     return {
         'status': 'saved',
@@ -66,7 +70,7 @@ def main() -> int:
     p.add_argument('--output', required=True, help='Output .eml file path')
     args = p.parse_args()
     try:
-        result = save_eml(args.message_id, args.output)
+        result = save_eml_from_service(build_gmail_service(), args.message_id, args.output)
         print(json.dumps(result, indent=2))
         return 0
     except Exception as e:

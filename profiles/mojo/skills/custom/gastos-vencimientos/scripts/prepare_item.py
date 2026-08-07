@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +39,7 @@ def prepare(
     elif item_type == "mercado_pago":
         if year is None:
             raise ValueError("Mercado Pago preparation requires --year")
-        extracted = [extract_mercado_pago_text(_open_pdf_text(paths["pdf"], password="31507"), year)]
+        extracted = [extract_mercado_pago_text(_open_pdf_text(paths["pdf"], password=os.environ["MERCADO_PAGO_PDF_PASSWORD"]), year)]
         source_maps = [{"pdf": paths["pdf"]}]
     elif item_type == "expensas":
         extracted = [extract_expensas_text(_open_pdf_text(paths["liquidacion"]), subject)]

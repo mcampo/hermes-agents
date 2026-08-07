@@ -27,7 +27,7 @@ from save_gmail_eml import save_eml_from_service
 
 
 UNREAD_QUERY = (
-    'label:eval is:unread ("resumen de cuenta" OR "resumen de tarjeta" '
+    'is:unread newer_than:30d ("resumen de cuenta" OR "resumen de tarjeta" '
     'OR resumen OR mastercard OR visa OR pago OR vencimiento OR factura OR '
     'expensas OR servicios OR servicio OR boleta OR deuda)'
 )
@@ -451,7 +451,7 @@ def process_batch(
 
 def build_services() -> dict[str, Any]:
     google_scripts = os.path.expanduser(
-        "~/.hermes/profiles/eval/skills/productivity/google-workspace/scripts"
+        "~/.hermes/profiles/mojo/skills/productivity/google-workspace/scripts"
     )
     sys.path.insert(0, google_scripts)
     from google_api import build_service  # type: ignore

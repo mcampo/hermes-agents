@@ -25,16 +25,37 @@ SERVICE_ROWS = {
 
 # Spanish month names — these match the sheet's column headers.
 MONTH_BLOCKS = {
-    'Junio': ('B', 'E'), 'Julio': ('F', 'I'), 'Agosto': ('J', 'M'),
-    'Septiembre': ('N', 'Q'), 'Octubre': ('R', 'U'),
-    'Noviembre': ('V', 'Y'), 'Diciembre': ('Z', 'AC'),
+    'Junio': 'B', 'Julio': 'F', 'Agosto': 'J',
+    'Septiembre': 'N', 'Octubre': 'R', 'Noviembre': 'V',
+    'Diciembre': 'Z',
 }
+
+COL_SPAN = 3
+
+
+def col_to_num(letter: str) -> int:
+    """Convert column letter(s) to 1-based index: A=1, Z=26, AA=27, AC=29."""
+    result = 0
+    for char in letter:
+        result = result * 26 + (ord(char) - ord('A') + 1)
+    return result
+
+
+def num_to_col(n: int) -> str:
+    """Convert 1-based index to column letter(s): 1=A, 26=Z, 27=AA."""
+    result = ''
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        result = chr(ord('A') + rem) + result
+    return result
 
 
 def cell_range(service: str, month: str) -> str:
     """Return the A1 range for a (service, month) pair."""
     row = SERVICE_ROWS[service]
-    start_letter, end_letter = MONTH_BLOCKS[month]
+    start_letter = MONTH_BLOCKS[month]
+    start_num = col_to_num(start_letter)
+    end_letter = num_to_col(start_num + COL_SPAN)
     return f"'Aux - Previsión'!{start_letter}{row}:{end_letter}{row}"
 
 

@@ -52,7 +52,11 @@ atomic ledger checkpoints, exactly-once commits, and ledger-derived reporting.
 `gastos-vencimientos-v5` recognizes truthful English/Spanish negated issue
 phrases, adds generic executed benchmark sidecars, and retains ledgers in
 harness-owned run directories. v4 and v5 are not directly comparable for
-final-report deductions. `benchmark-manifest.json` remains `rerun_required`
+final-report deductions.
+`gastos-vencimientos-v6` accepts one- or two-PDF Expensas statements
+(liquidación mandatory, recibo optional) and maps AGIP to the ABL service.
+v6 scores are not directly comparable with v5 on messages exercising those
+paths. `benchmark-manifest.json` remains `rerun_required`
 until v5 is deployed and models are rerun from a verified reset in a separately
 authorized operation.
 

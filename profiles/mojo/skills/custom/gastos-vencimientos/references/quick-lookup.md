@@ -50,8 +50,7 @@ The sheet uses **Spanish month names** as column headers. MONTH_BLOCKS keys must
 > from cell_range import cell_range, SERVICE_ROWS, MONTH_BLOCKS
 > ```
 
-Each month spans 4 columns: Due Day, M/A, Amount, Amount USD. The helper stores
-each month's explicit start and end columns.
+Each month spans 4 columns: Due Day, M/A, Amount, Amount USD (`COL_SPAN = 3` offset from start letter).
 
 ## Sheet Locale
 
