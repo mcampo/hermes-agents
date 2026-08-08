@@ -195,16 +195,18 @@ archive=$(mktemp "$state_dir/.mojo-backup.XXXXXX.tar.gz")
 rm -f -- "$archive"
 log "Exporting the Mojo profile."
 "$hermes_bin" profile export mojo -o "$archive"
+if (( mojo_was_running == 1 )); then
+    log "Restoring the Mojo gateway after export."
+    "$hermes_bin" -p mojo gateway start
+    mojo_was_running=0
+fi
 
-log "Validating gzip and tar integrity."
-gzip -t "$archive"
-tar -tzf "$archive" >/dev/null
-
-"$json_python" - "$archive" <<'PY'
+sanitized="${archive}.sanitized"
+if ! "$json_python" - "$archive" "$sanitized" <<'PY'
 import sys
 import tarfile
 
-archive_path = sys.argv[1]
+archive_path, sanitized_path = sys.argv[1:]
 credential_names = {
     ".env",
     "auth.json",
@@ -215,7 +217,7 @@ credential_names = {
     "token.json",
 }
 roots = set()
-with tarfile.open(archive_path, "r:gz") as archive:
+with tarfile.open(archive_path, "r:gz") as archive, tarfile.open(sanitized_path, "w:gz") as sanitized:
     for member in archive.getmembers():
         name = member.name.replace("\\", "/")
         if name.startswith("/") or "\x00" in name:
@@ -231,10 +233,27 @@ with tarfile.open(archive_path, "r:gz") as archive:
         if not (member.isdir() or member.isfile()):
             raise SystemExit(f"archive contains an unsupported entry: {member.name}")
         if parts[-1] in credential_names or parts[-1].startswith(".env"):
-            raise SystemExit(f"archive contains a credential file: {member.name}")
+            continue
+        if member.isfile():
+            content = archive.extractfile(member)
+            if content is None:
+                raise SystemExit(f"could not read archive member: {member.name}")
+            with content:
+                sanitized.addfile(member, content)
+        else:
+            sanitized.addfile(member)
 if roots != {"mojo"}:
     raise SystemExit("archive must contain exactly one mojo top-level root")
 PY
+then
+    rm -f -- "$sanitized"
+    die "could not sanitize and validate export"
+fi
+mv -f -- "$sanitized" "$archive" || die "could not replace export with sanitized archive"
+
+log "Validating gzip and tar integrity."
+gzip -t "$archive"
+tar -tzf "$archive" >/dev/null
 
 backup_date=$(TZ="$backup_timezone" date +%F)
 daily_name="mojo-backup-daily-${backup_date}.tar.gz"

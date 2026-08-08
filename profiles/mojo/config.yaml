@@ -516,6 +516,7 @@ discord:
       - Give me a sec.
       - On it.
 telegram:
+  gateway_restart_notification: false
   reactions: false
   allowed_chats: ''
   extra:
